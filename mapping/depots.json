@@ -1,0 +1,56 @@
+[
+  {
+    "depot_id": "STO",
+    "depot_name": "Stockholm",
+    "latitude": 59.3293,
+    "longitude": 18.0686,
+    "region": "SE1",
+    "charger_count": 12,
+    "max_charger_power_kw": 200
+  },
+  {
+    "depot_id": "GOT",
+    "depot_name": "Gothenburg",
+    "latitude": 57.7089,
+    "longitude": 11.9746,
+    "region": "SE3",
+    "charger_count": 10,
+    "max_charger_power_kw": 150
+  },
+  {
+    "depot_id": "MAL",
+    "depot_name": "Malmö",
+    "latitude": 55.605,
+    "longitude": 13.0038,
+    "region": "SE4",
+    "charger_count": 8,
+    "max_charger_power_kw": 150
+  },
+  {
+    "depot_id": "JKP",
+    "depot_name": "Jönköping",
+    "latitude": 57.7828,
+    "longitude": 14.1612,
+    "region": "SE3",
+    "charger_count": 6,
+    "max_charger_power_kw": 120
+  },
+  {
+    "depot_id": "HEL",
+    "depot_name": "Helsingborg",
+    "latitude": 56.0467,
+    "longitude": 12.6944,
+    "region": "SE4",
+    "charger_count": 4,
+    "max_charger_power_kw": 120
+  },
+  {
+    "depot_id": "ORE",
+    "depot_name": "Örebro",
+    "latitude": 59.2748,
+    "longitude": 15.2066,
+    "region": "SE2",
+    "charger_count": 4,
+    "max_charger_power_kw": 120
+  }
+]

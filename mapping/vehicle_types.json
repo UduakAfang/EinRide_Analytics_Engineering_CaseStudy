@@ -1,0 +1,25 @@
+{
+  "vehicle_types": {
+    "human_driven": {
+      "data_sources": [
+        "telematics",
+        "driver_app",
+        "tms"
+      ],
+      "ping_interval_seconds": 60,
+      "has_driver": true
+    },
+    "autonomous_pod": {
+      "data_sources": [
+        "telematics",
+        "lidar",
+        "radar",
+        "cameras",
+        "gps",
+        "inertial"
+      ],
+      "ping_interval_seconds": 5,
+      "has_driver": false
+    }
+  }
+}

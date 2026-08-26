@@ -1,0 +1,137 @@
+[
+  {
+    "customer_id": "CUST-01",
+    "customer_name": "Oatly Sverige",
+    "industry": "Food",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 98.5,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 85
+  },
+  {
+    "customer_id": "CUST-02",
+    "customer_name": "ICA Sverige",
+    "industry": "Retail",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 99.0,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 80
+  },
+  {
+    "customer_id": "CUST-03",
+    "customer_name": "Electrolux",
+    "industry": "Manufacturing",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 97.0,
+    "sustainability_reporting_required": false,
+    "diesel_baseline_gco2_per_tonkm": 90
+  },
+  {
+    "customer_id": "CUST-04",
+    "customer_name": "SCA",
+    "industry": "Paper",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 95.5,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 95
+  },
+  {
+    "customer_id": "CUST-05",
+    "customer_name": "IKEA Sverige",
+    "industry": "Retail",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 99.5,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 75
+  },
+  {
+    "customer_id": "CUST-06",
+    "customer_name": "Volvo Cars",
+    "industry": "Automotive",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 98.0,
+    "sustainability_reporting_required": false,
+    "diesel_baseline_gco2_per_tonkm": 88
+  },
+  {
+    "customer_id": "CUST-07",
+    "customer_name": "Skånemejerier",
+    "industry": "Food",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 97.5,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 82
+  },
+  {
+    "customer_id": "CUST-08",
+    "customer_name": "Stora Enso",
+    "industry": "Paper",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 96.0,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 92
+  },
+  {
+    "customer_id": "CUST-09",
+    "customer_name": "H&M",
+    "industry": "Retail",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 98.0,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 78
+  },
+  {
+    "customer_id": "CUST-10",
+    "customer_name": "Ahlgrens",
+    "industry": "Food",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 96.5,
+    "sustainability_reporting_required": false,
+    "diesel_baseline_gco2_per_tonkm": 88
+  },
+  {
+    "customer_id": "CUST-11",
+    "customer_name": "Saab",
+    "industry": "Manufacturing",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 99.0,
+    "sustainability_reporting_required": false,
+    "diesel_baseline_gco2_per_tonkm": 85
+  },
+  {
+    "customer_id": "CUST-12",
+    "customer_name": "Tetra Pak",
+    "industry": "Manufacturing",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 97.0,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 80
+  },
+  {
+    "customer_id": "CUST-13",
+    "customer_name": "Systembolaget",
+    "industry": "Retail",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 99.5,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 75
+  },
+  {
+    "customer_id": "CUST-14",
+    "customer_name": "LKAB",
+    "industry": "Mining",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 95.0,
+    "sustainability_reporting_required": true,
+    "diesel_baseline_gco2_per_tonkm": 100
+  },
+  {
+    "customer_id": "CUST-15",
+    "customer_name": "Biltema",
+    "industry": "Retail",
+    "contract_start_date": "2024-01-01",
+    "sla_otif_target_pct": 97.0,
+    "sustainability_reporting_required": false,
+    "diesel_baseline_gco2_per_tonkm": 82
+  }
+]
