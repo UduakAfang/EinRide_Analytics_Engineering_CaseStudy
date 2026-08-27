@@ -1,0 +1,402 @@
+[
+  {
+    "pod_id": "EIN-POD-001",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 320,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2024-08-08T00:00:00",
+    "home_depot_id": "MAL",
+    "initial_state_of_health_pct": 97.8,
+    "battery_chemistry": "NMC",
+    "payload_capacity_kg": 26700
+  },
+  {
+    "pod_id": "EIN-POD-002",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 250,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2024-12-13T00:00:00",
+    "home_depot_id": "MAL",
+    "initial_state_of_health_pct": 98.1,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 27200
+  },
+  {
+    "pod_id": "EIN-POD-003",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 250,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 500,
+    "deployment_date": "2024-12-18T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 98.2,
+    "battery_chemistry": "NMC",
+    "payload_capacity_kg": 27150
+  },
+  {
+    "pod_id": "EIN-POD-004",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 300,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 500,
+    "deployment_date": "2024-09-27T00:00:00",
+    "home_depot_id": "MAL",
+    "initial_state_of_health_pct": 97.9,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 26850
+  },
+  {
+    "pod_id": "EIN-POD-005",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 300,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2024-09-29T00:00:00",
+    "home_depot_id": "MAL",
+    "initial_state_of_health_pct": 97.9,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 26800
+  },
+  {
+    "pod_id": "EIN-POD-006",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 250,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2024-01-27T00:00:00",
+    "home_depot_id": "JKP",
+    "initial_state_of_health_pct": 97.2,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 27200
+  },
+  {
+    "pod_id": "EIN-POD-007",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 300,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2025-07-09T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 98.8,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 27000
+  },
+  {
+    "pod_id": "EIN-POD-008",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 320,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2024-08-11T00:00:00",
+    "home_depot_id": "JKP",
+    "initial_state_of_health_pct": 97.8,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 27200
+  },
+  {
+    "pod_id": "EIN-POD-009",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 300,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2025-07-25T00:00:00",
+    "home_depot_id": "JKP",
+    "initial_state_of_health_pct": 98.8,
+    "battery_chemistry": "NMC",
+    "payload_capacity_kg": 27200
+  },
+  {
+    "pod_id": "EIN-POD-010",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 300,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2024-07-16T00:00:00",
+    "home_depot_id": "MAL",
+    "initial_state_of_health_pct": 97.7,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 26650
+  },
+  {
+    "pod_id": "EIN-POD-011",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 300,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2025-04-08T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 98.5,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 26700
+  },
+  {
+    "pod_id": "EIN-POD-012",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 320,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2024-05-21T00:00:00",
+    "home_depot_id": "JKP",
+    "initial_state_of_health_pct": 97.5,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 26550
+  },
+  {
+    "pod_id": "EIN-POD-013",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 250,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 500,
+    "deployment_date": "2024-10-14T00:00:00",
+    "home_depot_id": "STO",
+    "initial_state_of_health_pct": 98.0,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 27150
+  },
+  {
+    "pod_id": "EIN-POD-014",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 320,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2025-04-19T00:00:00",
+    "home_depot_id": "JKP",
+    "initial_state_of_health_pct": 98.5,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 27200
+  },
+  {
+    "pod_id": "EIN-POD-015",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 320,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2024-10-14T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 98.0,
+    "battery_chemistry": "NMC",
+    "payload_capacity_kg": 26900
+  },
+  {
+    "pod_id": "EIN-POD-016",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 320,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2024-12-20T00:00:00",
+    "home_depot_id": "JKP",
+    "initial_state_of_health_pct": 98.2,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 26500
+  },
+  {
+    "pod_id": "EIN-POD-017",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 250,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2024-03-09T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 97.3,
+    "battery_chemistry": "LFP",
+    "payload_capacity_kg": 27250
+  },
+  {
+    "pod_id": "EIN-POD-018",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 320,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 650,
+    "deployment_date": "2024-12-01T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 98.1,
+    "battery_chemistry": "NMC",
+    "payload_capacity_kg": 26550
+  },
+  {
+    "pod_id": "EIN-POD-019",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 250,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2024-04-11T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 97.4,
+    "battery_chemistry": "NMC",
+    "payload_capacity_kg": 27150
+  },
+  {
+    "pod_id": "EIN-POD-020",
+    "oem": "Einride",
+    "vehicle_type": "autonomous_pod",
+    "battery_capacity_kwh": 300,
+    "sensor_suite": [
+      "lidar",
+      "radar",
+      "cameras",
+      "gps",
+      "inertial"
+    ],
+    "autonomy_level": "Level 4",
+    "max_range_km": 600,
+    "deployment_date": "2025-05-11T00:00:00",
+    "home_depot_id": "GOT",
+    "initial_state_of_health_pct": 98.6,
+    "battery_chemistry": "NMC",
+    "payload_capacity_kg": 27300
+  }
+]
