@@ -80,12 +80,12 @@
     "format": "json"
   },
   {
-    "folder": "mapping",
+    "folder": "data",
     "file": "shipments.ndjson",
     "format": "ndjson"
   },
   {
-    "folder": "mapping",
+    "folder": "data",
     "file": "daily_rollup.ndjson",
     "format": "ndjson"
   }
