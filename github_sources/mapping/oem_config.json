@@ -1,0 +1,89 @@
+{
+  "Tesla": {
+    "models": [
+      "Semi Electric"
+    ],
+    "battery_options": [
+      500,
+      600,
+      750
+    ],
+    "telemetry_fields": {
+      "energy": "battery_energy_used",
+      "energy_type": "cumulative",
+      "soc": "soc_percentage",
+      "speed": "vehicle_speed",
+      "location": "gps_coordinates"
+    }
+  },
+  "BYD": {
+    "models": [
+      "8TT",
+      "8R"
+    ],
+    "battery_options": [
+      300,
+      350,
+      400
+    ],
+    "telemetry_fields": {
+      "energy": "energy_consumption",
+      "energy_type": "cumulative",
+      "soc": "battery_soc",
+      "speed": "speed_kmh",
+      "location": "location"
+    }
+  },
+  "Scania": {
+    "models": [
+      "BEV 40R",
+      "BEV 45R"
+    ],
+    "battery_options": [
+      300,
+      450,
+      600
+    ],
+    "telemetry_fields": {
+      "energy": "Total Discharged Energy",
+      "energy_type": "cumulative",
+      "soc": "EV Battery State Of Charge",
+      "speed": "Vehicle Speed",
+      "location": "coordinates"
+    }
+  },
+  "Mercedes": {
+    "models": [
+      "eActros 300",
+      "eActros 400"
+    ],
+    "battery_options": [
+      300,
+      400
+    ],
+    "telemetry_fields": {
+      "energy": "energy_consumed",
+      "energy_type": "cumulative",
+      "soc": "soc",
+      "speed": "speed",
+      "location": "gps"
+    }
+  },
+  "DAF": {
+    "models": [
+      "CF Electric",
+      "XF Electric"
+    ],
+    "battery_options": [
+      300,
+      450
+    ],
+    "telemetry_fields": {
+      "energy": "Energy consumed",
+      "energy_type": "fms_standard",
+      "soc": "State of charge",
+      "speed": "Vehicle speed",
+      "location": "position"
+    }
+  }
+}

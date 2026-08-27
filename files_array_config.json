@@ -1,0 +1,92 @@
+[
+  {
+    "folder": "data",
+    "file": "traditional_sample.ndjson",
+    "format": "ndjson"
+  },
+  {
+    "folder": "data",
+    "file": "autonomous_sample.ndjson",
+    "format": "ndjson"
+  },
+  {
+    "folder": "mapping",
+    "file": "autonomous_pods.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "oem_config.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "trucks.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "customers.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "routes.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "depots.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "drivers.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "tariffs.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "grid_carbon_intensity.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "battery_specs.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "charger_types.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "vehicle_types.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "weather_mapping.json",
+    "format": "json"
+  },
+  {
+    "folder": "mapping",
+    "file": "sla_tiers.json",
+    "format": "json"
+  },
+  {
+    "folder": "data",
+    "file": "shipments.ndjson",
+    "format": "ndjson"
+  },
+  {
+    "folder": "data",
+    "file": "daily_rollup.ndjson",
+    "format": "ndjson"
+  }
+]

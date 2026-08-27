@@ -1,0 +1,24 @@
+{
+  "charger_types": {
+    "Level_2_AC": {
+      "power_kw": 22,
+      "connector": "Type2",
+      "typical_duration_hours": 8
+    },
+    "DC_Fast_50": {
+      "power_kw": 50,
+      "connector": "CCS2",
+      "typical_duration_hours": 1.5
+    },
+    "DC_Fast_150": {
+      "power_kw": 150,
+      "connector": "CCS2",
+      "typical_duration_hours": 0.8
+    },
+    "DC_Ultra_350": {
+      "power_kw": 350,
+      "connector": "CCS2",
+      "typical_duration_hours": 0.4
+    }
+  }
+}

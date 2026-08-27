@@ -1,0 +1,16 @@
+{
+  "sla_tiers": {
+    "premium": {
+      "otif_target": 99.5,
+      "penalty_rate": 0.05
+    },
+    "standard": {
+      "otif_target": 98.0,
+      "penalty_rate": 0.02
+    },
+    "basic": {
+      "otif_target": 95.0,
+      "penalty_rate": 0.01
+    }
+  }
+}

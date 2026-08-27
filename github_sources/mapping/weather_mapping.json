@@ -1,0 +1,22 @@
+{
+  "weather_conditions": {
+    "clear": {
+      "consumption_factor": 1.0,
+      "regen_efficiency": 0.6
+    },
+    "cloudy": {
+      "consumption_factor": 1.02,
+      "regen_efficiency": 0.6
+    },
+    "rain": {
+      "consumption_factor": 1.08,
+      "regen_efficiency": 0.55,
+      "rolling_resistance": 1.05
+    },
+    "snow": {
+      "consumption_factor": 1.15,
+      "regen_efficiency": 0.5,
+      "rolling_resistance": 1.15
+    }
+  }
+}

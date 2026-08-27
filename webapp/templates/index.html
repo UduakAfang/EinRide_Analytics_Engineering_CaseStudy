@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Einride Telemetry Stream</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --line:#272e38; --ink:#e6edf3;
+    --muted:#8b949e; --accent:#3fb950; --accent2:#58a6ff; --warn:#d29922; --bad:#f85149;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 64px}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:21px;margin:0;letter-spacing:-.01em}
+  .badge{font:600 11px/1 var(--mono);padding:5px 9px;border-radius:5px;letter-spacing:.06em}
+  .live{background:rgba(63,185,80,.15);color:var(--accent);border:1px solid rgba(63,185,80,.35)}
+  .mock{background:rgba(210,153,34,.15);color:var(--warn);border:1px solid rgba(210,153,34,.35)}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 26px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        padding:20px;margin-bottom:18px}
+  .card h2{font-size:15px;margin:0 0 4px}
+  .card p.hint{color:var(--muted);font-size:13px;margin:0 0 16px}
+  button{font:600 14px/1 inherit;padding:11px 18px;border-radius:7px;border:1px solid transparent;
+         cursor:pointer;transition:.12s}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .primary{background:var(--accent2);color:#06131f}
+  .primary:hover:not(:disabled){filter:brightness(1.12)}
+  .danger{background:transparent;color:var(--bad);border-color:rgba(248,81,73,.4)}
+  .danger:hover:not(:disabled){background:rgba(248,81,73,.1)}
+  .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:16px}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
+        text-transform:uppercase;letter-spacing:.05em}
+  select,input{width:100%;background:#0d1117;color:var(--ink);border:1px solid var(--line);
+               border-radius:6px;padding:9px 10px;font:14px var(--mono)}
+  .estimate{font:13px var(--mono);color:var(--accent2);margin:0 0 16px;min-height:20px}
+  .bar{height:6px;background:#0d1117;border-radius:3px;overflow:hidden;margin:16px 0 10px}
+  .bar>div{height:100%;background:var(--accent);width:0;transition:width .3s}
+  .stats{display:flex;gap:26px;flex-wrap:wrap;font:13px var(--mono);color:var(--muted)}
+  .stats b{color:var(--ink);font-weight:600}
+  pre{background:#0d1117;border:1px solid var(--line);border-radius:7px;padding:14px;
+      font:12.5px/1.6 var(--mono);overflow-x:auto;margin:12px 0 0;max-height:340px;overflow-y:auto}
+  .log{white-space:pre-wrap;color:var(--muted)}
+  .step{font:12px var(--mono);color:var(--muted);margin:14px 0 4px;
+        text-transform:uppercase;letter-spacing:.06em}
+  .ok{color:var(--accent)} .no{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Einride Telemetry Stream</h1>
+    {% if live %}<span class="badge live">LIVE → {{ hub }}</span>
+    {% else %}<span class="badge mock">MOCK — no connection string</span>{% endif %}
+  </header>
+  <p class="sub">
+    Synthetic fleet telemetry pushed to Azure Event Hubs. Every event comes from the same
+    stateful engine that generated the historical files, so the archive and the live stream
+    describe one consistent fleet.
+  </p>
+
+  <!-- ============ BUTTON 1 ============ -->
+  <div class="card">
+    <h2>1 · Send a test batch</h2>
+    <p class="hint">
+      Five events, shown in full so you can see the real per-manufacturer field names,
+      then read back off the hub to prove they arrived.
+    </p>
+    <button class="primary" id="btnTest">Send test batch</button>
+    <div id="testOut"></div>
+  </div>
+
+  <!-- ============ BUTTON 2 ============ -->
+  <div class="card">
+    <h2>2 · Run a simulation</h2>
+    <p class="hint">
+      Choose how much fleet activity to generate. The engine runs on a simulated clock,
+      so a day of fleet time does not take a day to produce.
+    </p>
+
+    <div class="controls">
+      <div>
+        <label for="family">Vehicles</label>
+        <select id="family">
+          <option value="human_driven">Road trucks (100)</option>
+          <option value="autonomous_pod">Autonomous pods (20)</option>
+          <option value="both">Both (120)</option>
+        </select>
+      </div>
+      <div>
+        <label for="days">Days of activity</label>
+        <input type="number" id="days" value="1" min="1" max="730">
+      </div>
+      <div>
+        <label for="grain">Grain</label>
+        <select id="grain">
+          <option value="ping">Ping level</option>
+          <option value="daily">Daily summary</option>
+        </select>
+      </div>
+      <div>
+        <label for="rate">Events / second</label>
+        <input type="number" id="rate" value="500" min="1" max="5000">
+      </div>
+    </div>
+
+    <p class="estimate" id="estimate">—</p>
+
+    <button class="primary" id="btnStart">Start streaming</button>
+    <button class="danger" id="btnStop" disabled>Stop</button>
+
+    <div class="bar"><div id="bar"></div></div>
+    <div class="stats">
+      <span>sent <b id="sSent">0</b></span>
+      <span>target <b id="sTarget">0</b></span>
+      <span>rate <b id="sRate">0</b>/s</span>
+      <span>elapsed <b id="sElapsed">0</b>s</span>
+      <span>sim clock <b id="sClock">—</b></span>
+    </div>
+    <pre class="log" id="log">Idle.</pre>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const families = () => $('family').value === 'both'
+  ? ['human_driven','autonomous_pod'] : [$('family').value];
+
+// ---- live estimate, so nobody starts a 60-million-event run by accident ----
+async function refreshEstimate(){
+  const p = new URLSearchParams();
+  families().forEach(f => p.append('family', f));
+  p.set('days', $('days').value);
+  p.set('grain', $('grain').value);
+  p.set('rate', $('rate').value);
+  const r = await fetch('/api/estimate?' + p).then(r => r.json());
+  $('estimate').textContent = '≈ ' + r.human;
+}
+['family','days','grain','rate'].forEach(id =>
+  $(id).addEventListener('input', refreshEstimate));
+refreshEstimate();
+
+// ---- button 1 ----
+$('btnTest').onclick = async () => {
+  const b = $('btnTest');
+  b.disabled = true; b.textContent = 'Sending…';
+  $('testOut').innerHTML = '';
+  try{
+    const r = await fetch('/api/test-batch', {method:'POST'}).then(r => r.json());
+    const back = r.read_back_note
+      ? `<span class="no">${r.read_back_note}</span>`
+      : `<span class="ok">${r.read_back.length} event(s) read back from the hub</span>`;
+    $('testOut').innerHTML =
+      `<div class="step">Result</div>
+       <pre>mode          ${r.mode}
+hub           ${r.hub}
+events sent   ${r.sent}
+round trip    ${r.elapsed_ms} ms
+partition key ${r.partition_keys.join(', ')}</pre>
+       <div class="step">Payloads sent</div>
+       <pre>${JSON.stringify(r.payloads, null, 2)
+              .replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>
+       <div class="step">Read back — ${back}</div>
+       <pre>${JSON.stringify(r.read_back, null, 2)
+              .replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>`;
+  }catch(e){
+    $('testOut').innerHTML = `<pre>Request failed: ${e}</pre>`;
+  }
+  b.disabled = false; b.textContent = 'Send test batch';
+};
+
+// ---- button 2 ----
+let poll = null;
+
+$('btnStart').onclick = async () => {
+  const body = {
+    families: families(),
+    days: +$('days').value,
+    grain: $('grain').value,
+    rate: +$('rate').value
+  };
+  const r = await fetch('/api/simulate/start',
+    {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+    .then(r => r.json());
+  if (r.error){ alert(r.error); return; }
+  $('btnStart').disabled = true; $('btnStop').disabled = false;
+  poll = setInterval(tick, 700);
+  tick();
+};
+
+$('btnStop').onclick = async () => {
+  await fetch('/api/simulate/stop', {method:'POST'});
+  $('btnStop').disabled = true;
+};
+
+async function tick(){
+  const s = await fetch('/api/simulate/status').then(r => r.json());
+  $('sSent').textContent    = s.sent.toLocaleString();
+  $('sTarget').textContent  = s.target.toLocaleString();
+  $('sRate').textContent    = s.rate;
+  $('sElapsed').textContent = s.elapsed;
+  $('sClock').textContent   = s.sim_clock || '—';
+  $('bar').style.width = (s.target ? 100 * s.sent / s.target : 0) + '%';
+  const log = $('log');
+  // Only scroll to the bottom if the user has not scrolled up to read something.
+  const pinned = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+  log.textContent = s.log.join('\n') || 'Idle.';
+  if (pinned) log.scrollTop = log.scrollHeight;
+  if (!s.running){
+    clearInterval(poll);
+    $('btnStart').disabled = false; $('btnStop').disabled = true;
+  }
+}
+</script>
+</body>
+</html>
