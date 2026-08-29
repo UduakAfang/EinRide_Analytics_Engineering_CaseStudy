@@ -88,5 +88,10 @@
     "folder": "data",
     "file": "daily_rollup.ndjson",
     "format": "ndjson"
+  },
+  {
+    "folder": "data",
+    "file": "weather_hourly.ndjson",
+    "format": "ndjson"
   }
 ]
