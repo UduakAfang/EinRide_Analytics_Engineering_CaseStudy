@@ -60,6 +60,20 @@
       "speed": "km/h"
     }
   },
+  "Einride": {
+    "models": ["Autonomous Pod"],
+    "telemetry_fields": {
+      "energy": "cumulative_energy_kwh",
+      "soc": "state_of_charge_pct",
+      "speed": "speed_kmh"
+    },
+    "energy_type": "cumulative",
+    "units": {
+      "energy": "kWh",
+      "soc": "percent",
+      "speed": "km/h"
+    }
+  },
   "DAF": {
     "models": ["CF Electric", "XF Electric"],
     "battery_options": [300, 450],
