@@ -1,4 +1,5 @@
-{
+[
+  {
   "Tesla": {
     "models": ["Semi Electric"],
     "battery_options": [500, 600, 750],
@@ -75,3 +76,4 @@
     }
   }
 }
+]
