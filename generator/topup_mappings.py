@@ -28,7 +28,7 @@ import os
 import random
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-MAPPING_DIR = os.path.join(_HERE, "..", "github_sources", "mapping")
+MAPPING_DIR = os.path.join(_HERE, "..", "mapping")
 
 # Seeded so re-running assigns the SAME chemistry to the same truck. If this were
 # unseeded, every run would silently rewrite the fleet's battery types and the

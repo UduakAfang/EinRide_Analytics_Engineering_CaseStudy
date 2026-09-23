@@ -5,10 +5,10 @@ Rewrites the GitHub source files from the stateful engine in fleet_engine.py.
 
 WHAT THIS PRODUCES
 ------------------
-  historical/traditional_sample.ndjson   ping-level, 100 road trucks, 60s interval
-  historical/autonomous_sample.ndjson    ping-level, 20 pods, 5s interval
-  historical/shipments.ndjson            the shipment ledger (customer, promise, actual)
-  historical/daily_rollup.ndjson         24 months x 120 vehicles, one row per day
+  data/traditional_sample.ndjson   ping-level, 100 road trucks, 60s interval
+  data/autonomous_sample.ndjson    ping-level, 20 pods, 5s interval
+  data/shipments.ndjson            the shipment ledger (customer, promise, actual)
+  data/daily_rollup.ndjson         24 months x 120 vehicles, one row per day
 
 THE SIZE BUDGET
 ---------------
@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fleet_engine import FleetEngine          # noqa: E402
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = os.path.join(_HERE, "..", "github_sources", "historical")
+OUT_DIR = os.path.join(_HERE, "..", "data")
 
 MAX_BYTES = 23_500_000          # ~22.4 MiB, comfortably inside the 25MB rule
 
@@ -261,29 +261,6 @@ def generate_weather(days=35, filename="weather_hourly.ndjson"):
     _report(filename, rows_out, bytes_out)
 
 
-def sync_repo_folders():
-    """Copy what was just generated into the two folders the repo serves from.
-
-    The generator writes to github_sources/ because that is the staging area ADF
-    reads. The repo publishes data/ and mapping/. Keeping the copy here means the
-    two never drift, and there is nothing to arrange by hand before a commit.
-    """
-    import shutil
-
-    pairs = [
-        (OUT_DIR, os.path.join(_HERE, "..", "data"), ".ndjson"),
-        (os.path.join(_HERE, "..", "github_sources", "mapping"),
-         os.path.join(_HERE, "..", "mapping"), ".json"),
-    ]
-    for src, dst, ext in pairs:
-        os.makedirs(dst, exist_ok=True)
-        for name in sorted(os.listdir(src)):
-            if not name.endswith(ext):
-                continue                      # skips .bak and anything else
-            shutil.copy2(os.path.join(src, name), os.path.join(dst, name))
-            print(f"  synced {os.path.basename(dst)}/{name}")
-
-
 if __name__ == "__main__":
     # Each stage can be run on its own: "python regenerate_history.py rollup".
     # Useful because the rollup is by far the slowest stage and there is no reason
@@ -308,7 +285,4 @@ if __name__ == "__main__":
     print(f"\nTimeline: rollup from {ROLLUP_START:%Y-%m-%d}"
           f" -> pings {PING_START:%Y-%m-%d}"
           f" -> live stream from {(PING_START + timedelta(days=1)):%Y-%m-%d}")
-    print("\nSyncing into data/ and mapping/ so the repo matches:")
-    sync_repo_folders()
-
-    print("\nDone. Re-upload github_sources/ and re-run the ADF pipeline.")
+    print("\nDone. Commit data/ and re-run the ADF pipeline.")

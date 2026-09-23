@@ -51,7 +51,7 @@ from datetime import datetime, timedelta, timezone
 # Resolve the mapping folder relative to THIS file, so the engine works no matter
 # which directory the caller runs from (notebook, Flask app, or a plain script).
 _HERE = os.path.dirname(os.path.abspath(__file__))
-MAPPING_DIR = os.path.join(_HERE, "..", "github_sources", "mapping")
+MAPPING_DIR = os.path.join(_HERE, "..", "mapping")
 
 # ---------------------------------------------------------------------------
 # PHYSICS CONSTANTS
