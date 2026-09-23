@@ -1,0 +1,166 @@
+version: 2
+
+models:
+
+  - name: int_einride_vehicles
+    description: One row per vehicle, trucks and pods. 120 rows.
+    columns:
+      # The unique test is what makes UNION ALL safe. It is also the first time
+      # vehicle_id is testable at all -- telemetry, shipments and daily_rollup
+      # all carry it and had nothing to point at.
+      - name: vehicle_id
+        data_tests: [unique, not_null]
+      - name: home_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      - name: vehicle_type
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_vehicle_types')
+              field: vehicle_type
+      - name: battery_chemistry
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_battery_specs')
+              field: battery_chemistry
+      - name: in_service_date
+        description: purchase_date for trucks, deployment_date for pods.
+        data_tests: [not_null]
+      - name: vin
+        data_tests:
+          - unique:
+              config:
+                where: "vin is not null"
+
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "(vehicle_type = 'human_driven') = (vin is not null)"
+          config:
+            alias: vehicles_only_trucks_have_a_vin
+
+  - name: int_einride_trip_sessions
+    description: One row per closed trip.
+    columns:
+      - name: trip_id
+        data_tests: [unique, not_null]
+      - name: vehicle_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_einride_vehicles')
+              field: vehicle_id
+      - name: route_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_routes')
+              field: route_id
+      - name: trip_distance_km
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1500
+
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "trip_ended_at > trip_started_at"
+          config:
+            alias: trips_end_after_start
+      # The meters only go up. A negative trip means the counter reset.
+      - dbt_utils.expression_is_true:
+          expression: "trip_energy_kwh >= 0"
+          config:
+            alias: trips_energy_never_negative
+      - dbt_utils.expression_is_true:
+          expression: "trip_distance_km >= 0"
+          config:
+            alias: trips_distance_never_negative
+
+  - name: int_einride_charging_sessions
+    description: One row per charging session. Most are still open.
+    columns:
+      - name: charge_session_id
+        data_tests: [unique, not_null]
+      - name: vehicle_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_einride_vehicles')
+              field: vehicle_id
+      - name: is_complete
+        data_tests: [not_null]
+
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "charge_ended_at >= charge_started_at"
+          config:
+            alias: charging_end_after_start
+      - dbt_utils.expression_is_true:
+          expression: "soc_end_pct >= soc_start_pct"
+          config:
+            alias: charging_soc_goes_up
+            severity: warn
+
+  - name: int_einride_alerts
+    description: One row per alert episode, per vehicle. A latched fault is one row, not eighty.
+    columns:
+      - name: alert_id
+        data_tests: [unique, not_null]
+      # The seed is the list now. A code the seed does not know fails here
+      # instead of being silently treated as an event.
+      - name: alert_code
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('einride_alert_codes')
+              field: alert_code
+      - name: alert_kind
+        data_tests: [not_null]
+      - name: severity
+        data_tests: [not_null]
+      - name: first_event_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_telemetry')
+              field: event_id
+      - name: vehicle_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_einride_vehicles')
+              field: vehicle_id
+      - name: alert_started_at
+        data_tests: [not_null]
+
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "alert_last_seen_at >= alert_started_at"
+          config:
+            alias: alerts_end_after_start
+
+      # A discrete event happens and is over. If one has a duration, the gap
+      # rule merged two of them and invented an eleven minute brake.
+      - dbt_utils.expression_is_true:
+          expression: "alert_kind = 'state' or alert_duration_minutes = 0"
+          config:
+            alias: alerts_events_have_no_duration
+
+      # Every episode should open with a tell-tale. If one does not, the source
+      # started reporting a fault without raising it, and the model needs to know.
+      - dbt_utils.expression_is_true:
+          expression: "had_tell_tale"
+          config:
+            alias: alerts_episode_opens_with_a_tell_tale
+            severity: warn
+
+      # A discrete event lands on a handful of rows. A latched fault lands on
+      # many. Neither should be zero.
+      - dbt_utils.accepted_range:
+          column_name: reported_on_rows
+          min_value: 1
+          max_value: 5000

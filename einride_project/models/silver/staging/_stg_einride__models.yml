@@ -1,0 +1,450 @@
+version: 2
+
+# Tests for the staging layer.
+#
+# Two questions per test: is this a real key, and does it hold the values we
+# think it holds.
+#
+# No relationships test on vehicle_id anywhere -- trucks and pods are still two
+# models, so there is nothing to point at. That test arrives with the union.
+
+models:
+
+# ---------- reference ----------
+
+  - name: stg_einride_trucks
+    description: One row per road truck. 100 rows.
+    columns:
+      - name: vehicle_id
+        description: Renamed from truck_id so trucks and pods share one name.
+        data_tests: [unique, not_null]
+      - name: vin
+        data_tests: [unique, not_null]
+      # Where the truck is based, not where it charges. The two disagree on 91%
+      # of charging events.
+      - name: home_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      - name: vehicle_type
+        data_tests:
+          - accepted_values:
+              values: ['human_driven']
+          - relationships:
+              to: ref('stg_einride_vehicle_types')
+              field: vehicle_type
+      - name: battery_chemistry
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_battery_specs')
+              field: battery_chemistry
+      - name: oem
+        data_tests: [not_null]
+
+  - name: stg_einride_autonomous_pods
+    description: One row per pod. 20 rows. No vin, no model -- built in-house.
+    columns:
+      - name: vehicle_id
+        data_tests: [unique, not_null]
+      - name: home_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      - name: vehicle_type
+        data_tests:
+          - accepted_values:
+              values: ['autonomous_pod']
+          - relationships:
+              to: ref('stg_einride_vehicle_types')
+              field: vehicle_type
+      - name: battery_chemistry
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_battery_specs')
+              field: battery_chemistry
+
+  - name: stg_einride_drivers
+    description: One row per driver. 100 rows; 99 appear in telemetry.
+    columns:
+      - name: driver_id
+        data_tests: [unique, not_null]
+      - name: home_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      - name: license_class
+        data_tests:
+          - accepted_values:
+              values: ['C', 'CE']
+
+  - name: stg_einride_depots
+    description: Six depots. Stockholm and Orebro carry the wrong region -- fixed
+      in the generator, not here.
+    columns:
+      - name: depot_id
+        data_tests: [unique, not_null]
+      - name: depot_name
+        data_tests: [unique, not_null]
+      - name: region
+        description: Same concept tariffs and carbon call price_zone.
+        data_tests:
+          - accepted_values:
+              values: ['SE1', 'SE2', 'SE3', 'SE4']
+      - name: latitude
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 55
+              max_value: 69
+      - name: longitude
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 10
+              max_value: 25
+
+  - name: stg_einride_routes
+    description: Six fixed corridors. SE-URB-GOT has origin = dest; it is a loop.
+    columns:
+      - name: route_id
+        data_tests: [unique, not_null]
+      - name: route_origin_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      - name: route_dest_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      - name: distance_km
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 1000
+
+  - name: stg_einride_customers
+    description: Fifteen customers, each carrying its own OTIF target.
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: customer_name
+        data_tests: [unique, not_null]
+      - name: sla_otif_target_pct
+        description: What every OTIF figure is measured against.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 90
+              max_value: 100
+
+  # Joins to nothing yet -- customers carry their own target and no tier column.
+  - name: stg_einride_sla_tiers
+    description: Three service tiers.
+    columns:
+      - name: sla_tier
+        data_tests: [unique, not_null]
+      - name: sla_otif_target_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 90
+              max_value: 100
+
+  - name: stg_einride_charger_types
+    description: Four charger classes.
+    columns:
+      - name: charger_type
+        data_tests: [unique, not_null]
+      - name: charger_power_kw
+        description: What the charger supplies. Telemetry's charge_power_kw is what the vehicle draws.
+        data_tests: [not_null]
+
+  - name: stg_einride_battery_specs
+    description: Three chemistries. Drives the degradation curve.
+    columns:
+      - name: battery_chemistry
+        data_tests: [unique, not_null]
+      - name: cycle_life
+        data_tests: [not_null]
+
+  # rolling_resistance is null on clear and cloudy -- no extra resistance. Not
+  # coalesced here; that assumption belongs in the intermediate layer.
+  - name: stg_einride_weather_conditions
+    description: Four conditions and their effect on consumption.
+    columns:
+      - name: weather_condition
+        data_tests: [unique, not_null]
+
+  - name: stg_einride_vehicle_types
+    description: Two types, scalar attributes only.
+    columns:
+      - name: vehicle_type
+        data_tests: [unique, not_null]
+      - name: ping_interval_seconds
+        description: 60 for trucks, 5 for pods. Any per-vehicle count must split by type.
+        data_tests: [not_null]
+      - name: has_driver
+        data_tests: [not_null]
+
+  # Separate model because the grain differs -- together they would repeat
+  # ping_interval_seconds and break every average.
+  - name: stg_einride_vehicle_type_data_sources
+    description: One row per vehicle type per data source. 9 rows.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - vehicle_type
+            - data_source
+    columns:
+      - name: vehicle_type
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_vehicle_types')
+              field: vehicle_type
+      - name: data_source
+        data_tests: [not_null]
+
+# ---------- facts ----------
+
+  - name: stg_einride_shipments
+    description: One row per dispatched leg, current state.
+    columns:
+      - name: dispatch_id
+        description: The key. Minted at departure.
+        data_tests: [unique, not_null]
+
+      # Null on deadheads, so unique among the non-nulls only.
+      - name: shipment_id
+        data_tests:
+          - unique:
+              config:
+                where: "shipment_id is not null"
+
+      - name: customer_id
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_customers')
+              field: customer_id
+
+      - name: route_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_routes')
+              field: route_id
+
+      - name: shipment_origin_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+
+      - name: shipment_dest_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+
+      - name: vehicle_type
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_vehicle_types')
+              field: vehicle_type
+
+      - name: is_deadhead
+        data_tests: [not_null]
+
+      - name: planned_distance_km
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 1000
+
+    # The source declares is_deadhead. These check it still agrees with itself.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "is_deadhead = (shipment_id is null)"
+          config:
+            alias: shipments_deadhead_flag_matches_null_shipment_id
+
+      - dbt_utils.expression_is_true:
+          expression: "not is_deadhead or (customer_id is null and cargo_weight_kg = 0)"
+          config:
+            alias: shipments_deadhead_carries_nothing
+
+      - dbt_utils.expression_is_true:
+          expression: "actual_arrival_at is null or actual_arrival_at >= dispatched_at"
+          config:
+            alias: shipments_arrival_after_dispatch
+
+  - name: stg_einride_telemetry
+    description: One row per message. Columns 25-36 are pods only; trucks are null there.
+    columns:
+      - name: event_id
+        description: Rows = distinct event_ids proves the archive did not replay.
+        data_tests: [unique, not_null]
+
+      - name: event_time
+        data_tests: [not_null]
+
+      - name: vehicle_id
+        data_tests: [not_null]
+
+      - name: vehicle_type
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_vehicle_types')
+              field: vehicle_type
+
+      # Null for a pod, and for a truck parked before its shift. Both fine.
+      - name: driver_id
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_drivers')
+              field: driver_id
+
+      - name: route_id
+        description: Non-null exactly while running a route. Trips session on this.
+        data_tests:
+          - relationships:
+              to: ref('stg_einride_routes')
+              field: route_id
+
+      - name: trigger_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['TIMER', 'TELL_TALE', 'DISTANCE_TRAVELLED', 'IGNITION_ON',
+                       'IGNITION_OFF', 'DRIVER_LOGIN', 'DRIVER_LOGOUT',
+                       'CHARGING_STARTED', 'CHARGING_STOPPED']
+
+      - name: speed_kmh
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 130
+              config:
+                severity: warn
+
+      - name: state_of_charge_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+    data_tests:
+      # A parked truck with no driver is fine. A moving one is not.
+      - dbt_utils.expression_is_true:
+          expression: "driver_id is not null or vehicle_type = 'autonomous_pod' or coalesce(speed_kmh, 0) = 0"
+          config:
+            alias: telemetry_moving_truck_has_a_driver
+
+      - dbt_utils.expression_is_true:
+          expression: "not is_charging or charge_session_id is not null"
+          config:
+            alias: telemetry_charging_row_has_a_session
+
+  - name: stg_einride_daily_rollup
+    description: One row per vehicle per day, Nov 2024 to Aug 2026. Where degradation lives.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - vehicle_id
+            - rollup_date
+    columns:
+      - name: vehicle_id
+        data_tests: [not_null]
+      - name: rollup_date
+        data_tests: [not_null]
+      - name: state_of_health_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 50
+              max_value: 100
+      - name: end_of_day_soc_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+  - name: stg_einride_tariffs
+    description: A price profile, not a time series. 4 zones x 24 hours x 2 day types.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - price_zone
+            - hour_of_day
+            - day_type
+    columns:
+      - name: price_zone
+        description: Same concept depots call region.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['SE1', 'SE2', 'SE3', 'SE4']
+      - name: hour_of_day
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 23
+      - name: day_type
+        data_tests:
+          - accepted_values:
+              values: ['weekday', 'weekend']
+      - name: price_sek_per_kwh
+        data_tests: [not_null]
+
+  - name: stg_einride_grid_carbon_intensity
+    description: Same shape as tariffs, no day type.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - price_zone
+            - hour_of_day
+    columns:
+      - name: price_zone
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['SE1', 'SE2', 'SE3', 'SE4']
+      - name: hour_of_day
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 23
+      - name: carbon_intensity_gco2_per_kwh
+        data_tests: [not_null]
+
+  # consumption_factor is also in weather_conditions. Left duplicated until the
+  # intermediate layer picks one.
+  - name: stg_einride_weather_hourly
+    description: Hourly by region, 26 Aug to 29 Sep. Overlaps telemetry.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - region
+            - observed_at
+    columns:
+      - name: region
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['SE1', 'SE2', 'SE3', 'SE4']
+      - name: observed_at
+        data_tests: [not_null]
+      - name: weather_condition
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_weather_conditions')
+              field: weather_condition

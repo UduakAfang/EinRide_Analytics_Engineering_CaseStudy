@@ -1,0 +1,65 @@
+
+# Name your project! Project names should contain only lowercase characters
+# and underscores. A good package name should reflect your organization's
+# name or the intended use of these models
+name: 'einride_project'
+version: '1.0.0'
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'einride_project'
+
+# These configurations specify where dbt should look for different types of files.
+# The `model-paths` config, for example, states that models in this project can be
+# found in the "models/" directory. You probably won't need to change these!
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:         # directories to be removed by `dbt clean`
+  - "target"
+  - "dbt_packages"
+
+
+# Configuring models
+# Full documentation: https://docs.getdbt.com/docs/configuring-models
+
+# In this example config, we tell dbt to build all models in the example/
+# directory as views. These settings can be overridden in the individual model
+# files using the `{{ config(...) }}` macro.
+models:
+  einride_project:
+    silver:
+      +schema: silver
+      # staging  -- one source table each, renamed and cast. Nothing joins here.
+      # intermediate -- where tables meet: trips, sessions, planned vs actual.
+      # Both land in einride.silver; the folders exist so you can rebuild one
+      # layer without rebuilding the other.
+      staging:
+        +materialized: view
+      intermediate:
+        +materialized: view
+      # obt -- the wide table. Incremental, because it is the only model big
+      # enough for a full rebuild to cost anything.
+      obt:
+        +materialized: incremental
+    gold:
+      +schema: gold
+      +materialized: table
+
+
+# How long a gap before a still-burning fault counts as a new one.
+#
+# A latching fault re-asserts every 15 minutes, so rows one heartbeat apart are
+# one fault. 30 means two heartbeats missed -- the light went out.
+#
+# Only applies to alerts the seed marks as a state. An event has no duration, so
+# its threshold is zero and only rows sharing a timestamp merge.
+vars:
+  alert_gap_minutes: 30
+
+seeds:
+  einride_project:
+    +schema: silver

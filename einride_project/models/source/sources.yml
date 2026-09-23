@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: einride
+    schema: bronze
+    tables:
+      - name: battery_specs
+      - name: charger_types
+      - name: vehicle_types
+      - name: weather_mapping
+      - name: sla_tiers
+      - name: oem_config
+      - name: trucks
+      - name: autonomous_pods
+      - name: drivers
+      - name: depots
+      - name: routes
+      - name: customers
+      - name: shipments
+      - name: daily_rollup
+      - name: weather_hourly
+      - name: tariffs
+      - name: grid_carbon_intensity
+      - name: telemetry_unified

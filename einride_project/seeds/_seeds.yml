@@ -1,0 +1,27 @@
+version: 2
+
+seeds:
+  - name: einride_alert_codes
+    description: What each alert code means and whether it is a state or an event.
+      A real fleet keeps this as a DTC reference from the manufacturer.
+    config:
+      column_types:
+        alert_code: string
+        alert_kind: string
+        severity: string
+        description: string
+    columns:
+      - name: alert_code
+        data_tests: [unique, not_null]
+      # state  -- a light that comes on and stays on until it clears
+      # event  -- something that happened and is already over
+      - name: alert_kind
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['state', 'event']
+      - name: severity
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['low', 'medium', 'high']

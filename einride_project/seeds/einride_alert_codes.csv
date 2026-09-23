@@ -1,0 +1,10 @@
+alert_code,alert_kind,severity,description
+brake_fault,state,high,Brake system warning lamp
+tyre_pressure_low,state,medium,Tyre pressure below threshold
+coolant_temp_high,state,high,Coolant temperature above limit
+charging_system_fault,state,high,Charging system not operating normally
+lamp_failure,state,low,Exterior lamp not responding
+low_state_of_charge,state,medium,Battery below the low charge threshold
+harsh_braking,event,low,Deceleration above threshold
+harsh_acceleration,event,low,Acceleration above threshold
+over_speed,event,medium,Speed above the permitted limit

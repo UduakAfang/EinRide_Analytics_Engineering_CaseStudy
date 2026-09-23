@@ -1,0 +1,24 @@
+# Packages this project depends on. Run `dbt deps` after any change here.
+#
+# Pinned exactly rather than to a range. A range means a colleague running
+# `dbt deps` next month can get a different macro than the one this project was
+# tested against, and the failure shows up as a test result nobody can reproduce.
+packages:
+
+  # Generic tests and helper macros. The one package almost every dbt project
+  # has. Gives us equal_rowcount, accepted_range, expression_is_true,
+  # unique_combination_of_columns -- the tests that go beyond unique/not_null.
+  - package: dbt-labs/dbt_utils
+    version: 1.4.1
+
+  # Scaffolding only. generate_base_model prints a staging model's SELECT with
+  # every column listed, and generate_model_yaml prints the YAML skeleton. Run
+  # once, paste the output, edit it. Nothing it produces stays dynamic.
+  - package: dbt-labs/codegen
+    version: 0.14.1
+
+  # Richer data tests -- distributions, row counts against a threshold, column
+  # types, date continuity. Maintained by Metaplane since Calogica handed it
+  # over. Pulls dbt_date in as its own dependency, so that is not listed here.
+  - package: metaplane/dbt_expectations
+    version: 0.10.10
