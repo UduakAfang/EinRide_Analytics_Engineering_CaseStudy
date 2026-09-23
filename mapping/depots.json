@@ -4,7 +4,7 @@
     "depot_name": "Stockholm",
     "latitude": 59.3293,
     "longitude": 18.0686,
-    "region": "SE1",
+    "region": "SE3",
     "charger_count": 12,
     "max_charger_power_kw": 200
   },
@@ -49,8 +49,53 @@
     "depot_name": "Örebro",
     "latitude": 59.2748,
     "longitude": 15.2066,
-    "region": "SE2",
+    "region": "SE3",
     "charger_count": 4,
     "max_charger_power_kw": 120
+  },
+  {
+    "depot_id": "GAV",
+    "depot_name": "Gävle",
+    "latitude": 60.6749,
+    "longitude": 17.1413,
+    "region": "SE3",
+    "charger_count": 5,
+    "max_charger_power_kw": 150
+  },
+  {
+    "depot_id": "SUN",
+    "depot_name": "Sundsvall",
+    "latitude": 62.3908,
+    "longitude": 17.3069,
+    "region": "SE2",
+    "charger_count": 6,
+    "max_charger_power_kw": 150
+  },
+  {
+    "depot_id": "UME",
+    "depot_name": "Umeå",
+    "latitude": 63.8258,
+    "longitude": 20.263,
+    "region": "SE1",
+    "charger_count": 4,
+    "max_charger_power_kw": 120
+  },
+  {
+    "depot_id": "LUL",
+    "depot_name": "Luleå",
+    "latitude": 65.5848,
+    "longitude": 22.1547,
+    "region": "SE1",
+    "charger_count": 3,
+    "max_charger_power_kw": 120
+  },
+  {
+    "depot_id": "NRK",
+    "depot_name": "Norrköping",
+    "latitude": 58.5877,
+    "longitude": 16.1924,
+    "region": "SE3",
+    "charger_count": 6,
+    "max_charger_power_kw": 150
   }
 ]

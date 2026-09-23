@@ -64,11 +64,35 @@ LOADED_PENALTY = 0.45       # extra fraction of BASE consumed at 100% payload
 HIGHWAY_SPEED_KMH = 78.0    # cruising speed on the E4/E6 long-haul routes
 URBAN_SPEED_KMH = 42.0      # average speed on the Gothenburg distribution loop
 SOC_CHARGE_FLOOR = 22.0     # below this the vehicle diverts to a depot to charge
+
+# What dispatch ASSUMES a kilometre costs, which is not what it actually costs.
+# A typical load plus a 10% reserve -- enough that a truck is not sent down a
+# corridor it cannot finish, loose enough that it still arrives low and trips
+# the low-charge warning. Planning rates are always a guess; this one is stated.
+PLANNING_KWH_PER_KM = BASE_KWH_PER_KM * (1 + LOADED_PENALTY * 0.6) * 1.05
 SOC_CHARGE_TARGET = 90.0    # charging stops here (topping to 100% is slow and rare)
 FAST_CHARGE_THRESHOLD_KW = 100.0   # above this counts as a "fast charge" for wear
 CALENDAR_FADE_MULTIPLIER = 1.0     # scales battery_specs.degradation_rate (%/day)
 CYCLE_FADE_TO_EOL_PCT = 20.0       # a battery is "end of life" after losing 20% SoH
 FAST_CHARGE_WEAR_FACTOR = 1.6      # fast charging ages the pack 60% faster per cycle
+
+# ---------------------------------------------------------------------------
+# TRIGGER TYPES
+# ---------------------------------------------------------------------------
+# Real FMS telematics does not report on a fixed heartbeat alone. Every message
+# carries a triggerType saying WHY it was sent: a timer expired, or something
+# happened. A truck parked overnight sends a slow trickle of TIMER pings; a truck
+# starting a shift sends a burst -- ignition, driver login, then timers.
+#
+# Modelling this matters for more than realism. It produces IRREGULAR intervals,
+# which is what real telematics looks like and what downstream code has to cope
+# with. Anything that assumes a tidy ping every 60 seconds breaks on real data.
+DISTANCE_REPORT_KM = 50.0          # emit a DISTANCE_TRAVELLED event every 50 km
+
+PING_INTERVAL = {                  # seconds between TIMER pings, per family
+    "human_driven": 60,
+    "autonomous_pod": 5,
+}
 
 
 def _load(name: str):
@@ -79,6 +103,29 @@ def _load(name: str):
     """
     with open(os.path.join(MAPPING_DIR, name), "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+# Faults that latch. A warning light comes on, stays on, and is reported on
+# every message until someone clears it -- which is how rFMS works: tell-tale
+# status rides in the vehicle status payload, not in a message of its own.
+LATCHING_FAULTS = [
+    "brake_fault",
+    "tyre_pressure_low",
+    "coolant_temp_high",
+    "charging_system_fault",
+    "lamp_failure",
+]
+
+# Per-tick chance a vehicle develops one, and how long it stays lit.
+FAULT_ONSET_PROB = 0.00015
+FAULT_MIN_MINUTES = 20
+FAULT_MAX_MINUTES = 240
+
+# How often a fault that is still lit says so again. Strict rFMS would repeat it
+# on every status message, which for a 90 minute fault is 90 rows of the same
+# news. Real fleets filter at the edge and re-assert on a heartbeat instead.
+# 15 minutes keeps the duration visible without flooding the feed.
+FAULT_REASSERT_MINUTES = 15
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -112,7 +159,11 @@ class FleetEngine:
         # ---- Load reference data once, up front -------------------------------
         self.trucks = _load("trucks.json")
         self.pods = _load("autonomous_pods.json")
-        self.oem_config = _load("oem_config.json")
+        # The published file wraps the alias map in a one-element array, so that
+        # pandas reads it as a single row when it lands in bronze. The engine
+        # wants the map itself.
+        _cfg = _load("oem_config.json")
+        self.oem_config = _cfg[0] if isinstance(_cfg, list) else _cfg
         self.depots = _load("depots.json")
         self.routes = _load("routes.json")
         self.customers = _load("customers.json")
@@ -155,6 +206,12 @@ class FleetEngine:
         # Sustainability dashboard a customer to attribute emissions to, and the Ops
         # dashboard a promised-vs-actual arrival to measure OTIF against.
         self.shipments: list[dict] = []
+
+        # A live run has no end, so a leg has to announce itself as it happens
+        # rather than being written out once at the finish.
+        self._dispatch_seq = 0          # every leg gets a key, loaded or empty
+        self._change_seq = 0            # puts out-of-order messages back in order
+        self.shipment_changes: list[dict] = []
 
         # ---- Materialise vehicle state ---------------------------------------
         self.state: dict[str, dict] = {}
@@ -237,6 +294,17 @@ class FleetEngine:
             "charge_power_kw": None,
             "idle_seconds": 0,
             "alerts": [],
+            # Each family reports on its own cadence, so the engine can advance in
+            # small steps while a road truck still only pings once a minute. Without
+            # this, running trucks and pods together would emit a truck ping every
+            # 5 seconds -- twelve times too often.
+            "ping_interval": PING_INTERVAL[kind],
+            "since_ping": PING_INTERVAL[kind],   # due immediately on the first tick
+            "km_since_report": 0.0,
+            # code -> the minute it clears. Everything in here is reported on
+            # every message until its time is up.
+            "active_faults": {},
+            "_pending": [],                      # trigger types waiting to be emitted
             # Persistent lateral offset from the straight depot-to-depot line, so the
             # track reads as a road corridor. It is re-rolled per TRIP, never per ping:
             # fresh noise on every ping made consecutive points jump ~1.3km apart,
@@ -260,6 +328,15 @@ class FleetEngine:
         """
         return str(uuid.UUID(int=self.rng.getrandbits(128), version=4))
 
+    def _queue(self, st: dict, trigger: str) -> None:
+        """Mark that this vehicle owes an event-triggered message.
+
+        Queued rather than emitted directly because a state change happens in the
+        middle of advance(), while emission belongs to the caller -- which may be
+        writing a file, streaming to a hub, or discarding pods entirely.
+        """
+        st["_pending"].append(trigger)
+
     def _weather(self, region: str) -> str:
         """Pick (and cache) the weather for one region on the current simulated day."""
         key = (region, self.clock.strftime("%Y-%m-%d"))
@@ -279,7 +356,22 @@ class FleetEngine:
         options = self.routes_from.get(st["at_depot"])
         if not options:
             return                                   # depot has no outbound route
-        route, direction = self.rng.choice(options)
+
+        # Do not dispatch onto a leg the battery cannot finish.
+        #
+        # Without this a truck sitting at 40% gets sent down a 265 km corridor and
+        # runs flat on the road, which no dispatcher would allow and no fleet
+        # would report. The reserve is 25% on top of the worst-case loaded rate.
+        usable_kwh = st["capacity_kwh"] * st["soh_pct"] / 100.0 * st["soc_pct"] / 100.0
+        reachable = [(r, d) for (r, d) in options
+                     if r["distance_km"] * PLANNING_KWH_PER_KM <= usable_kwh]
+        if not reachable:
+            # Nothing in range. Plug in, unless it is already as full as charging
+            # ever takes it -- that would start a new session every tick.
+            if st["soc_pct"] < SOC_CHARGE_TARGET:
+                self._begin_charge(st, st["at_depot"])
+            return
+        route, direction = self.rng.choice(reachable)
 
         st["route"] = route
         st["direction"] = direction
@@ -289,6 +381,15 @@ class FleetEngine:
         # New trip, new corridor offset.
         st["lat_off"] = self.rng.uniform(-0.03, 0.03)
         st["lon_off"] = self.rng.uniform(-0.05, 0.05)
+
+        # Starting a shift produces a burst of event messages, not a single ping.
+        self._queue(st, "IGNITION_ON")
+
+        # Every leg needs a key. shipment_id cannot be it: a deadhead is a real
+        # leg with real kilometres that nobody ordered, so it has no shipment_id,
+        # and keying on a null would merge every empty run into one row.
+        self._dispatch_seq += 1
+        dispatch_id = f"DSP-{self._dispatch_seq:07d}"
 
         # Forward legs carry freight for a customer. Return legs are empty ~55% of the
         # time -- that empty running IS the deadhead ratio on the Ops dashboard, so it
@@ -312,6 +413,7 @@ class FleetEngine:
             # in breach. This lands around 85-92%, the band real carriers operate in.
             promised = self.clock + timedelta(hours=transit_h * self.rng.uniform(1.02, 1.26))
             record = {
+                "dispatch_id": dispatch_id,
                 "shipment_id": st["shipment_id"],
                 "customer_id": customer["customer_id"],
                 "vehicle_id": st["vehicle_id"],
@@ -329,6 +431,7 @@ class FleetEngine:
             }
             st["_shipment_rec"] = record
             self.shipments.append(record)
+            self._record_change(record, "DISPATCHED")
         else:
             st["shipment_id"] = None
             st["customer_id"] = None
@@ -336,6 +439,7 @@ class FleetEngine:
             # Deadhead legs still get a ledger row (with no customer) so the Ops
             # dashboard can divide empty km by total km without guessing.
             record = {
+                "dispatch_id": dispatch_id,
                 "shipment_id": None,
                 "customer_id": None,
                 "vehicle_id": st["vehicle_id"],
@@ -353,12 +457,15 @@ class FleetEngine:
             }
             st["_shipment_rec"] = record
             self.shipments.append(record)
+            self._record_change(record, "DISPATCHED")
 
         # Human-driven trucks get a driver from the departure depot's pool.
         # Autonomous pods never do -- driver_id stays NULL, which is the point.
         if st["kind"] == "human_driven":
             pool = self.drivers_by_depot.get(st["at_depot"]) or self.drivers
             st["driver_id"] = self.rng.choice(pool)["driver_id"]
+            # The driver card going into the tachograph is its own reportable event.
+            self._queue(st, "DRIVER_LOGIN")
         else:
             st["driver_id"] = None
 
@@ -377,6 +484,7 @@ class FleetEngine:
         power = usable[-1] if usable else self.charger_powers[0]
 
         st["status"] = "charging"
+        self._queue(st, "CHARGING_STARTED")
         st["charge_session_id"] = f"CHG-{self._charge_seq:07d}"
         st["charge_power_kw"] = float(power)
         st["charge_sessions"] += 1
@@ -400,13 +508,17 @@ class FleetEngine:
     # THE TICK
     # ------------------------------------------------------------------
     def advance(self, step_seconds: int) -> None:
-        """Move the whole fleet forward by `step_seconds` of simulated time."""
+        """Move the whole fleet forward by `step_seconds` of simulated time.
+
+        Call drain() afterwards to collect whatever messages the vehicles now owe.
+        """
         self.clock += timedelta(seconds=step_seconds)
         hours = step_seconds / 3600.0
         days = step_seconds / 86400.0
 
         for st in self.state.values():
             st["alerts"] = []                    # alerts are per-ping, not sticky
+            st["since_ping"] += step_seconds     # counts down to the next TIMER ping
 
             if st["status"] == "charging":
                 # Charging tapers above 80% SoC -- constant-current then constant-voltage.
@@ -417,6 +529,7 @@ class FleetEngine:
                 st["battery_temp_c"] = min(48.0, st["battery_temp_c"] + 1.4 * hours * taper)
                 self._age_battery(st, kwh_in, days)
                 if st["soc_pct"] >= SOC_CHARGE_TARGET:
+                    self._queue(st, "CHARGING_STOPPED")
                     st["status"] = "idle"
                     st["charge_session_id"] = None
                     st["charge_power_kw"] = None
@@ -496,11 +609,73 @@ class FleetEngine:
             st["speed_kmh"] = round(speed, 1)
             st["weather"] = weather
 
-            if st["soc_pct"] < 15:
-                st["alerts"].append("low_state_of_charge")
+            # Driver-behaviour events. These happen and are over in a second, so
+            # they report once and never repeat. Nothing to latch.
             if self.rng.random() < 0.0025:
                 st["alerts"].append(self.rng.choice(["harsh_braking", "harsh_acceleration",
                                                      "over_speed"]))
+
+            # A latching fault is a different animal from the three above. It
+            # comes on and STAYS on, so it keeps reporting until it clears --
+            # one TELL_TALE at the start, then it rides out on the timer pings.
+            #
+            # That is what makes counting alerts hard downstream: the same fault
+            # arrives a hundred times with a hundred timestamps, and only the
+            # first one is news.
+            for code, f in list(st["active_faults"].items()):
+                # clears_at None means the fault clears on a condition, not a
+                # clock. Low charge is the only one: it goes out when the battery
+                # comes back, not when a timer runs out.
+                if f["clears_at"] is not None and self.clock >= f["clears_at"]:
+                    del st["active_faults"][code]
+
+            new_faults = []
+
+            # Low charge is a latching state too, so it lives here with the rest.
+            # It comes on below 15% and only goes off above 20%. That gap is
+            # hysteresis -- without it a vehicle sitting at 14.9% would flicker
+            # the light on and off every tick.
+            if st["soc_pct"] < 15 and "low_state_of_charge" not in st["active_faults"]:
+                st["active_faults"]["low_state_of_charge"] = {
+                    "clears_at": None,
+                    "last_reported": None,
+                }
+                new_faults.append("low_state_of_charge")
+            elif st["soc_pct"] > 20:
+                st["active_faults"].pop("low_state_of_charge", None)
+
+            if self.rng.random() < FAULT_ONSET_PROB:
+                code = self.rng.choice(LATCHING_FAULTS)
+                if code not in st["active_faults"]:
+                    minutes = self.rng.randint(FAULT_MIN_MINUTES, FAULT_MAX_MINUTES)
+                    st["active_faults"][code] = {
+                        "clears_at": self.clock + timedelta(minutes=minutes),
+                        "last_reported": None,
+                    }
+                    new_faults.append(code)
+
+            # Report a live fault when it first appears, then once per heartbeat.
+            # Silence in between is the point -- the light has not changed.
+            for code, f in st["active_faults"].items():
+                due = (f["last_reported"] is None
+                       or (self.clock - f["last_reported"]).total_seconds()
+                          >= FAULT_REASSERT_MINUTES * 60)
+                if due:
+                    st["alerts"].append(code)
+                    f["last_reported"] = self.clock
+
+            # TELL_TALE fires on the transition only. A fault already lit does
+            # not raise it again -- otherwise a fleet with five stuck lights
+            # would be sending nothing but alarms.
+            if new_faults or [a for a in st["alerts"] if a not in st["active_faults"]]:
+                self._queue(st, "TELL_TALE")
+
+            # Distance thresholds are a standard FMS trigger: report every N km
+            # regardless of the clock, so a fast-moving vehicle reports more often.
+            st["km_since_report"] += km
+            if st["km_since_report"] >= DISTANCE_REPORT_KM:
+                st["km_since_report"] -= DISTANCE_REPORT_KM
+                self._queue(st, "DISTANCE_TRAVELLED")
 
             # Arrived: park at the destination depot and drop the load.
             if frac >= 1.0:
@@ -508,12 +683,18 @@ class FleetEngine:
                 # Stamp the actual arrival and settle the on-time flag. Comparing the
                 # two ISO strings works because both are zero-padded UTC of the same
                 # format -- lexical order equals chronological order, no parsing needed.
+                self._queue(st, "IGNITION_OFF")
+                if st["kind"] == "human_driven":
+                    self._queue(st, "DRIVER_LOGOUT")
                 rec = st.pop("_shipment_rec", None)
                 if rec is not None:
                     rec["actual_arrival_at"] = self.clock.strftime("%Y-%m-%dT%H:%M:%SZ")
                     if rec["promised_arrival_at"]:
                         rec["delivered_on_time"] = (
                             rec["actual_arrival_at"] <= rec["promised_arrival_at"])
+                    # The second message about this leg. Same dispatch_id, higher
+                    # change_seq, so AUTO CDC overwrites the row the first one made.
+                    self._record_change(rec, "ARRIVED")
                 st["at_depot"] = arrived
                 st["status"] = "idle"
                 st["route"] = None
@@ -522,6 +703,51 @@ class FleetEngine:
                 st["idle_seconds"] = 0
                 st["lat"] = self.depot_by_id[arrived]["latitude"]
                 st["lon"] = self.depot_by_id[arrived]["longitude"]
+
+        self._tick_timers(step_seconds)
+
+    def _tick_timers(self, step_seconds: int) -> None:
+        """Queue a TIMER ping for every vehicle whose reporting interval has elapsed.
+
+        Runs after all state has been updated, so a timer ping always reflects the
+        vehicle's position at the end of the tick rather than the start.
+        """
+        for st in self.state.values():
+            if st["since_ping"] >= st["ping_interval"]:
+                st["since_ping"] = 0
+                self._queue(st, "TIMER")
+
+    def _record_change(self, rec: dict, change_type: str) -> None:
+        """Queue a shipment change for the caller to send.
+
+        Queued rather than sent because the engine does not know whether it is
+        writing a file, streaming to a hub, or being run in a test -- the same
+        reason _queue() exists for telemetry.
+        """
+        self._change_seq += 1
+        self.shipment_changes.append({
+            **rec,
+            "message_type": "shipment",     # how the consumer tells these apart
+            "change_type": change_type,     # DISPATCHED or ARRIVED
+            "change_seq": self._change_seq,
+            "changed_at": self.clock.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+    def drain_shipment_changes(self) -> list:
+        """Return every queued shipment change and clear the queue."""
+        out, self.shipment_changes = self.shipment_changes, []
+        return out
+
+    def drain(self, vehicle_id: str, source: str = "batch_archive") -> list:
+        """Return every message this vehicle owes, and clear its queue.
+
+        Usually zero or one message. Occasionally several: a truck leaving a depot
+        emits IGNITION_ON, DRIVER_LOGIN and a TIMER ping within the same second,
+        which is exactly what a real telematics unit does at the start of a shift.
+        """
+        st = self.state[vehicle_id]
+        pending, st["_pending"] = st["_pending"], []
+        return [self.emit(vehicle_id, source=source, trigger=t) for t in pending]
 
     # ------------------------------------------------------------------
     # EMISSION
@@ -540,7 +766,8 @@ class FleetEngine:
         payload[fields["energy"]] = round(st["lifetime_kwh"], 2)
         return payload
 
-    def emit(self, vehicle_id: str, source: str = "batch_archive") -> dict:
+    def emit(self, vehicle_id: str, source: str = "batch_archive",
+             trigger: str = "TIMER") -> dict:
         """Build one telemetry payload from the vehicle's CURRENT state."""
         st = self.state[vehicle_id]
         ts = self.clock.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -550,6 +777,7 @@ class FleetEngine:
         common = {
             "event_id": self._uuid(),
             "timestamp": ts,
+            "trigger_type": trigger,
             "ingested_by": source,
             "latitude": round(st["lat"], 6),
             "longitude": round(st["lon"], 6),
@@ -564,9 +792,12 @@ class FleetEngine:
             "shipment_id": st["shipment_id"],
             "customer_id": st["customer_id"],
             "route_id": st["route"]["route_id"] if st["route"] else None,
-            "weather_condition": st.get("weather", "clear"),
             "alerts": st["alerts"],
         }
+        # NOTE: weather_condition is deliberately NOT here. A truck has no idea it
+        # is snowing -- it only knows the outside air is 2C. Weather is a separate
+        # source, pulled hourly per region and joined in the silver layer. Sending
+        # it on every ping would repeat one regional fact thousands of times an hour.
 
         if st["kind"] == "human_driven":
             payload = {
@@ -671,6 +902,85 @@ class FleetEngine:
             st["soc_pct"] = self.rng.uniform(62, 95)
             self._age_battery(st, kwh, 1.0)
             st["charge_power_kw"] = None
+
+    # ------------------------------------------------------------------
+    # PERSISTENCE
+    # ------------------------------------------------------------------
+    def export_state(self) -> dict:
+        """Capture everything needed to resume this fleet exactly where it is.
+
+        WHY: the web app has two buttons that both put events on the same hub. If
+        each click built a fresh engine, the same truck would report 240,000 lifetime
+        kWh in one batch and 190,000 in the next -- a counter running backwards, which
+        is precisely the defect the stateful engine exists to prevent. Saving and
+        reloading means the fleet has one continuous history no matter how many times
+        the app is stopped, started, or clicked.
+
+        The RNG position is saved too, so the sequence carries on rather than
+        restarting and replaying the same "random" choices after every restart.
+        """
+        clean = {}
+        for vid, st in self.state.items():
+            # _shipment_rec is kept, not stripped. It used to be dropped because
+            # nothing read it back -- the archive wrote its ledger at the end of a
+            # run. Now a leg announces its own arrival, and arrival needs the record
+            # the departure made. Drop it across a restart and every leg in flight
+            # at save time arrives silently: no ARRIVED message, so shipments keeps
+            # a null arrival time for ever and the leg looks permanently moving.
+            row = dict(st)
+            # datetimes do not survive JSON. Faults keep their clear time as an
+            # ISO string and come back as datetimes on import.
+            row["active_faults"] = {
+                c: {k: (v.strftime("%Y-%m-%dT%H:%M:%SZ") if v else None)
+                    for k, v in f.items()}
+                for c, f in st["active_faults"].items()}
+            # route is a plain dict from routes.json, so it serialises as-is; storing
+            # the id alone would mean re-resolving it on every load for no gain.
+            clean[vid] = row
+        return {
+            "clock": self.clock.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "shipment_seq": self._shipment_seq,
+            "dispatch_seq": self._dispatch_seq,
+            "change_seq": self._change_seq,
+            "charge_seq": self._charge_seq,
+            # dict keys must be strings in JSON, so flatten the (region, date) tuple.
+            "weather": {f"{r}|{d}": w for (r, d), w in self.weather_by_day.items()},
+            "rng": self.rng.getstate(),
+            "vehicles": clean,
+        }
+
+    def import_state(self, data: dict) -> None:
+        """Restore a fleet previously captured by export_state()."""
+        self.clock = datetime.strptime(data["clock"], "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc)
+        self._shipment_seq = data.get("shipment_seq", 0)
+        self._dispatch_seq = data.get("dispatch_seq", 0)
+        self._change_seq = data.get("change_seq", 0)
+        self._charge_seq = data.get("charge_seq", 0)
+        self.weather_by_day = {tuple(k.split("|", 1)): v
+                               for k, v in data.get("weather", {}).items()}
+        if data.get("rng"):
+            # JSON turns the tuple into a list and the inner state into a list too;
+            # setstate insists on tuples, so rebuild the exact shape it expects.
+            st = data["rng"]
+            self.rng.setstate((st[0], tuple(st[1]), st[2]))
+
+        # Merge rather than replace: a vehicle added to trucks.json since the state
+        # was saved keeps the fresh entry built in __init__ instead of vanishing.
+        for vid, row in data.get("vehicles", {}).items():
+            if vid in self.state:
+                # Fault clear times went out as ISO strings; bring them back as
+                # datetimes or the comparison against the clock fails.
+                def _dt(v):
+                    if isinstance(v, str):
+                        return datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ").replace(
+                            tzinfo=timezone.utc)
+                    return v
+
+                faults = row.get("active_faults") or {}
+                row["active_faults"] = {
+                    c: {k: _dt(v) for k, v in f.items()} for c, f in faults.items()}
+                self.state[vid].update(row)
 
     def daily_rollup(self, vehicle_id: str) -> dict:
         """One end-of-day summary row per vehicle.

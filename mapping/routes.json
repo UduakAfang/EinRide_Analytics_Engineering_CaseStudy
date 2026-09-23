@@ -46,5 +46,53 @@
     "dest": "GOT",
     "distance_km": 45,
     "elevation_gain_m": 15
+  },
+  {
+    "route_id": "SE-E4-STO-GAV",
+    "name": "Stockholm → Gävle (E4)",
+    "origin": "STO",
+    "dest": "GAV",
+    "distance_km": 175,
+    "elevation_gain_m": 70
+  },
+  {
+    "route_id": "SE-E4-GAV-SUN",
+    "name": "Gävle → Sundsvall (E4)",
+    "origin": "GAV",
+    "dest": "SUN",
+    "distance_km": 220,
+    "elevation_gain_m": 95
+  },
+  {
+    "route_id": "SE-E4-SUN-UME",
+    "name": "Sundsvall → Umeå (E4)",
+    "origin": "SUN",
+    "dest": "UME",
+    "distance_km": 265,
+    "elevation_gain_m": 110
+  },
+  {
+    "route_id": "SE-E4-UME-LUL",
+    "name": "Umeå → Luleå (E4)",
+    "origin": "UME",
+    "dest": "LUL",
+    "distance_km": 265,
+    "elevation_gain_m": 85
+  },
+  {
+    "route_id": "SE-E4-STO-NRK",
+    "name": "Stockholm → Norrköping (E4)",
+    "origin": "STO",
+    "dest": "NRK",
+    "distance_km": 160,
+    "elevation_gain_m": 45
+  },
+  {
+    "route_id": "SE-E4-NRK-JKP",
+    "name": "Norrköping → Jönköping (E4)",
+    "origin": "NRK",
+    "dest": "JKP",
+    "distance_km": 160,
+    "elevation_gain_m": 75
   }
 ]
