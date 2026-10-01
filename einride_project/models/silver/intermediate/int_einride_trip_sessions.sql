@@ -45,7 +45,14 @@ numbered AS (
         MAX(event_time) OVER (PARTITION BY vehicle_id) AS vehicle_last_seen_at
 
     FROM marked
-    WHERE route_id IS NOT NULL
+
+    -- The parked rows stay. IGNITION_OFF arrives after the generator has
+    -- already cleared the route, so filtering on route_id here deleted every
+    -- one of them and has_ignition_off could never be true.
+    --
+    -- A parked row carries the trip_seq of the trip it follows, because the
+    -- running total only moves on a start. So the tail belongs to its trip,
+    -- which is exactly where the IGNITION_OFF is.
 
 )
 
@@ -58,24 +65,37 @@ SELECT
     MAX(customer_id)                                    AS customer_id,
     MAX(driver_id)                                      AS driver_id,
 
-    MIN(event_time)                                     AS trip_started_at,
-    MAX(event_time)                                     AS trip_ended_at,
-    (UNIX_TIMESTAMP(MAX(event_time))
-       - UNIX_TIMESTAMP(MIN(event_time))) / 60.0        AS trip_duration_minutes,
+    -- Driving rows only. The parked tail is in this group to carry the
+    -- IGNITION_OFF, and counting it would add the time spent standing still
+    -- at the depot to the trip.
+    MIN(CASE WHEN route_id IS NOT NULL THEN event_time END)
+                                                        AS trip_started_at,
+    MAX(CASE WHEN route_id IS NOT NULL THEN event_time END)
+                                                        AS trip_ended_at,
+    (UNIX_TIMESTAMP(MAX(CASE WHEN route_id IS NOT NULL THEN event_time END))
+       - UNIX_TIMESTAMP(MIN(CASE WHEN route_id IS NOT NULL THEN event_time END)))
+       / 60.0                                           AS trip_duration_minutes,
 
     -- The meters are lifetime odometers, so a trip is the difference between
     -- the first and last reading. Never a sum.
-    MAX_BY(distance_meter_km, event_time)
-      - MIN_BY(distance_meter_km, event_time)           AS trip_distance_km,
-    MAX_BY(energy_meter_kwh, event_time)
-      - MIN_BY(energy_meter_kwh, event_time)            AS trip_energy_kwh,
+    MAX_BY(CASE WHEN route_id IS NOT NULL THEN distance_meter_km END, event_time)
+      - MIN_BY(CASE WHEN route_id IS NOT NULL THEN distance_meter_km END, event_time)
+                                                        AS trip_distance_km,
+    MAX_BY(CASE WHEN route_id IS NOT NULL THEN energy_meter_kwh END, event_time)
+      - MIN_BY(CASE WHEN route_id IS NOT NULL THEN energy_meter_kwh END, event_time)
+                                                        AS trip_energy_kwh,
 
-    MIN_BY(state_of_charge_pct, event_time)             AS soc_start_pct,
-    MAX_BY(state_of_charge_pct, event_time)             AS soc_end_pct,
+    MIN_BY(CASE WHEN route_id IS NOT NULL THEN state_of_charge_pct END, event_time)
+                                                        AS soc_start_pct,
+    MAX_BY(CASE WHEN route_id IS NOT NULL THEN state_of_charge_pct END, event_time)
+                                                        AS soc_end_pct,
 
-    AVG(speed_kmh)                                      AS avg_speed_kmh,
-    MAX(speed_kmh)                                      AS max_speed_kmh,
-    COUNT(*)                                            AS ping_count,
+    AVG(CASE WHEN route_id IS NOT NULL THEN speed_kmh END)
+                                                        AS avg_speed_kmh,
+    MAX(CASE WHEN route_id IS NOT NULL THEN speed_kmh END)
+                                                        AS max_speed_kmh,
+    SUM(CASE WHEN route_id IS NOT NULL THEN 1 ELSE 0 END)
+                                                        AS ping_count,
 
     MAX(CASE WHEN trigger_type = 'IGNITION_OFF' THEN TRUE ELSE FALSE END)
                                                         AS has_ignition_off
@@ -84,8 +104,12 @@ FROM numbered
 
 GROUP BY vehicle_id, trip_seq
 
--- Closed only. Either the vehicle logged off, or it has reported since on
--- something else. The 43 trips still in flight fall out here and get picked up
--- on a later run.
-HAVING MAX(CASE WHEN trigger_type = 'IGNITION_OFF' THEN 1 ELSE 0 END) = 1
-    OR MAX(event_time) < MAX(vehicle_last_seen_at)
+-- Must contain driving rows. trip_seq 0 is whatever the vehicle did before
+-- its first trip, and that is not a trip.
+HAVING MAX(CASE WHEN route_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+
+   -- Closed either way: the truck said IGNITION_OFF, or it has reported since
+   -- on something else, so this trip must be over even if we never saw it end.
+   AND (MAX(CASE WHEN trigger_type = 'IGNITION_OFF' THEN 1 ELSE 0 END) = 1
+        OR MAX(CASE WHEN route_id IS NOT NULL THEN event_time END)
+             < MAX(vehicle_last_seen_at))

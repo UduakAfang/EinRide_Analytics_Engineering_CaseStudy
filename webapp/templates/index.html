@@ -55,10 +55,14 @@
   <header>
     <h1>Einride Telemetry Stream</h1>
     {% if live %}<span class="badge live">LIVE → {{ hub }}</span>
-    {% else %}<span class="badge mock">MOCK — no connection string</span>{% endif %}
+    {% else %}<span class="badge mock">MOCK — no destination configured</span>{% endif %}
+    <button id="preflightBtn" onclick="preflight()">Test connection</button>
+    <span id="preflightOut"></span>
   </header>
   <p class="sub">
-    Synthetic fleet telemetry pushed to Azure Event Hubs. Every event comes from the same
+    Synthetic fleet telemetry pushed to a Databricks landing volume, where Auto Loader
+    picks it up. Event Hubs was the original transport and the code path is still there —
+    only the sender changed. Every event comes from the same
     stateful engine that generated the historical files, so the archive and the live stream
     describe one consistent fleet.
   </p>
@@ -152,13 +156,19 @@ $('btnTest').onclick = async () => {
   $('testOut').innerHTML = '';
   try{
     const r = await fetch('/api/test-batch', {method:'POST'}).then(r => r.json());
+    // The server answers errors in JSON too. Say what it said, rather than
+    // reading .length off a field that was never sent.
+    if (r.error) {
+      $('testOut').innerHTML = `<pre class="err">${r.error}\n\n${r.detail}</pre>`;
+      return;
+    }
     const back = r.read_back_note
       ? `<span class="no">${r.read_back_note}</span>`
-      : `<span class="ok">${r.read_back.length} event(s) read back from the hub</span>`;
+      : `<span class="ok">${r.read_back.length} event(s) read back</span>`;
     $('testOut').innerHTML =
       `<div class="step">Result</div>
        <pre>mode          ${r.mode}
-hub           ${r.hub}
+destination   ${r.hub}
 events sent   ${r.sent}
 round trip    ${r.elapsed_ms} ms
 partition key ${r.partition_keys.join(', ')}</pre>
@@ -215,6 +225,15 @@ async function tick(){
     clearInterval(poll);
     $('btnStart').disabled = false; $('btnStop').disabled = true;
   }
+}
+
+async function preflight() {
+  const out = document.getElementById("preflightOut");
+  out.innerHTML = "checking...";
+  const r = await (await fetch("/api/preflight")).json();
+  out.innerHTML = r.ok
+    ? `<span class="ok">OK — ${r.volume}</span>`
+    : `<span class="err">${r.detail || r.mode}</span>`;
 }
 </script>
 </body>

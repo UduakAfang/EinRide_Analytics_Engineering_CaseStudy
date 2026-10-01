@@ -1,6 +1,13 @@
 .venv/
 __pycache__/
 *.pyc
+.env
+.env.*
+!.env.example
+!**/.env.example
+**/.env
+**/.env.*
+**/profiles.yml
 webapp/.env
 generator/*.log
 .vscode/

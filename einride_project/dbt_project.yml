@@ -60,6 +60,22 @@ models:
 vars:
   alert_gap_minutes: 30
 
+  # Where the SLA tiers start.
+  #
+  # The source does not say which tier a customer is on. customers.json gives an
+  # OTIF target, sla_tiers.json gives three named tiers with their own targets,
+  # and nothing joins them -- 10 of the 15 customers sit between two tiers.
+  #
+  # So the tier is read back from the target, and these two numbers are the rule.
+  # A customer gets the tier they have actually reached, not the nearest one:
+  # 97.0 has not met standard's 98.0, so it is basic. Nearest would put 96.5
+  # exactly between two tiers with no way to break the tie.
+  #
+  # These belong here and not in a CASE because they are arguable. If sales says
+  # standard starts at 97.5, that is one line.
+  sla_premium_min_otif_pct: 99.5
+  sla_standard_min_otif_pct: 98.0
+
 seeds:
   einride_project:
     +schema: silver

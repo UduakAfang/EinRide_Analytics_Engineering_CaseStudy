@@ -1,0 +1,210 @@
+version: 2
+
+models:
+
+  - name: dim_customer
+    description: >
+      One row per customer per version of their contract. Type 2 -- customer_id
+      repeats, customer_key does not. Facts join on customer_key.
+    columns:
+
+      # customer_key is unique; customer_id deliberately is not. That is the
+      # whole difference between a Type 2 dimension and a Type 1 one.
+      - name: customer_key
+        data_tests: [unique, not_null]
+
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_customers')
+              field: customer_id
+
+      - name: sla_otif_target_pct
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 90
+              max_value: 100
+
+      # The tier is inferred from two numbers in dbt_project.yml. If the CASE
+      # ever produces something outside this list the macro has drifted.
+      - name: sla_tier_derived
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['premium', 'standard', 'basic']
+
+      - name: sla_penalty_rate_derived
+        description: Inferred from the derived tier, not from a contract.
+        data_tests: [not_null]
+
+      - name: valid_from
+        data_tests: [not_null]
+
+      - name: is_current
+        data_tests: [not_null]
+
+    data_tests:
+      # One version per customer per start date.
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [customer_id, valid_from]
+
+      - dbt_utils.expression_is_true:
+          expression: "valid_to is null or valid_to > valid_from"
+          config:
+            alias: customer_version_windows_do_not_invert
+
+  - name: fct_shipment
+    description: One row per leg, loaded or empty. Deadheads included.
+    columns:
+
+      # This is the Type 2 guard. dim_customer now has several rows per
+      # customer, so a windowed join that lost its window would double the leg
+      # here -- and nothing else would error. If this test fails, look at the
+      # join in fct_shipment before looking anywhere else.
+      - name: dispatch_id
+        data_tests: [unique, not_null]
+
+      - name: customer_key
+        data_tests:
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_key
+              config:
+                where: "customer_id is not null"
+
+      - name: route_id
+        data_tests:
+          - relationships:
+              to: ref('dim_route')
+              field: route_id
+
+      # A truck cannot carry more than its payload. Over 100 means the cargo
+      # weight or the payload figure is wrong.
+      - name: fill_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+      # Loaded legs with telemetry should always get a price. A null here means
+      # the zone or the hour did not match dim_energy_price.
+      - name: energy_cost_sek
+        data_tests:
+          - not_null:
+              config:
+                where: "has_telemetry"
+
+  - name: dim_driver
+    description: >
+      One row per driver per version of their record. Type 2 on license_class
+      and home_depot_id. driver_id repeats; driver_key does not.
+    columns:
+      - name: driver_key
+        data_tests: [unique, not_null]
+
+      - name: driver_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_drivers')
+              field: driver_id
+
+      - name: license_class
+        data_tests: [not_null]
+
+      - name: home_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+
+      - name: valid_from
+        data_tests: [not_null]
+
+      - name: is_current
+        data_tests: [not_null]
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [driver_id, valid_from]
+
+      - dbt_utils.expression_is_true:
+          expression: "valid_to is null or valid_to > valid_from"
+          config:
+            alias: driver_version_windows_do_not_invert
+
+  - name: fct_trip
+    description: One row per closed trip.
+    columns:
+
+      # The Type 2 guard, same job as dispatch_id on fct_shipment. dim_driver
+      # now has several rows per driver, so a windowed join that lost its
+      # window would double the trip here and nothing else would complain.
+      - name: trip_id
+        data_tests: [unique, not_null]
+
+      - name: driver_key
+        data_tests:
+          - relationships:
+              to: ref('dim_driver')
+              field: driver_key
+              config:
+                where: "driver_id is not null"
+
+  - name: dim_date
+    description: One row per day from the first rollup day to today. Mark it as the date table in Power BI.
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+      - name: day_type
+        data_tests:
+          - accepted_values:
+              values: ['weekday', 'weekend']
+
+  - name: dim_route
+    description: One row per route, both ends named and placed in a price zone.
+    columns:
+      - name: route_id
+        data_tests: [unique, not_null]
+      - name: route_origin_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      - name: route_dest_depot_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_einride_depots')
+              field: depot_id
+      # Null here would mean an origin depot with no zone, and every leg on
+      # that route would get no price and no carbon.
+      - name: route_origin_region
+        data_tests: [not_null]
+
+  - name: dim_energy_price
+    description: Price and grid carbon by price zone, hour and day type. 192 rows.
+    columns:
+      - name: energy_price_key
+        data_tests: [unique, not_null]
+      - name: carbon_intensity_gco2_per_kwh
+        data_tests: [not_null]
+
+  - name: fct_vehicle_latest
+    description: One row per vehicle, its most recent ping.
+    columns:
+      - name: vehicle_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_vehicle')
+              field: vehicle_id
+      - name: fleet_status
+        data_tests:
+          - accepted_values:
+              values: ['Charging', 'Driving', 'Stopped on route', 'At depot']

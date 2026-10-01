@@ -156,8 +156,7 @@ LEFT JOIN {{ ref('stg_einride_weather_conditions') }} wc
 LEFT JOIN {{ ref('stg_einride_tariffs') }} tf
        ON tf.price_zone = COALESCE(ro.region, hd.region)
       AND tf.hour_of_day = HOUR(t.event_time)
-      AND tf.day_type = CASE WHEN DAYOFWEEK(t.event_time) IN (1, 7)
-                             THEN 'weekend' ELSE 'weekday' END
+      AND tf.day_type = {{ day_type('t.event_time') }}
 
 LEFT JOIN {{ ref('stg_einride_grid_carbon_intensity') }} gc
        ON gc.price_zone = COALESCE(ro.region, hd.region)

@@ -1,0 +1,26 @@
+snapshots:
+
+  # The second Type 2, and it earns it for a compliance reason rather than a
+  # commercial one.
+  #
+  # license_class decides what a driver is legally allowed to operate. Nothing
+  # in fct_trip records it -- the trip stores driver_id and nothing else about
+  # the driver. So the day someone upgrades from C to CE, every trip they ever
+  # drove starts reading as CE-qualified, including the ones where they were
+  # not. "Was this driver licensed for this vehicle at the time" then has no
+  # honest answer.
+  #
+  # home_depot_id is here for the same shape of reason. A trip stamps the
+  # VEHICLE's home depot, never the driver's, so "how does Gothenburg compare
+  # to Malmo on energy per km" silently reassigns a year of a driver's trips
+  # the moment they transfer.
+  - name: snap_drivers
+    relation: source('bronze', 'drivers')
+    config:
+      schema: silver
+      unique_key: driver_id
+      strategy: check
+      check_cols:
+        - license_class
+        - home_depot_id
+      hard_deletes: new_record

@@ -15,6 +15,12 @@ SELECT
     t.shipment_id,
     t.customer_id,
     t.driver_id,
+    dr.driver_key,
+    dr.driver_name,
+
+    -- What the driver was licensed for on the day of this trip, not today.
+    dr.license_class,
+    dr.home_depot_id                                AS driver_home_depot_id,
 
     v.vehicle_type,
     v.oem,
@@ -55,5 +61,16 @@ FROM {{ ref('int_einride_trip_sessions') }} t
 LEFT JOIN {{ ref('dim_vehicle') }} v
        ON t.vehicle_id = v.vehicle_id
 
-LEFT JOIN {{ ref('stg_einride_routes') }} r
+LEFT JOIN {{ ref('dim_route') }} r
        ON t.route_id = r.route_id
+
+-- dim_driver is Type 2, so one driver has several rows. Without the two window
+-- lines this join matches every version of them and quietly doubles the trip --
+-- no error, just every fleet total inflated.
+--
+-- With them, the trip picks up the licence class and depot that were true when
+-- it ran. coalesce because valid_to is null on the current version.
+LEFT JOIN {{ ref('dim_driver') }} dr
+       ON t.driver_id = dr.driver_id
+      AND t.trip_started_at >= dr.valid_from
+      AND t.trip_started_at <  COALESCE(dr.valid_to, TIMESTAMP '9999-12-31')

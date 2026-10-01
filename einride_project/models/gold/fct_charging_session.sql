@@ -16,7 +16,7 @@ SELECT
     v.home_depot_region,
 
     c.charge_started_at,
-    c.charge_ended_at,
+       c.charge_last_seen_at,
     DATE(c.charge_started_at)                       AS charge_date,
     HOUR(c.charge_started_at)                       AS charge_start_hour,
     c.charge_duration_minutes,

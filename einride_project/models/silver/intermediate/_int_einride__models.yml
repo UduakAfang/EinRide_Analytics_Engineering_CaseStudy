@@ -96,7 +96,7 @@ models:
 
     data_tests:
       - dbt_utils.expression_is_true:
-          expression: "charge_ended_at >= charge_started_at"
+          expression: "charge_last_seen_at >= charge_started_at"
           config:
             alias: charging_end_after_start
       - dbt_utils.expression_is_true:

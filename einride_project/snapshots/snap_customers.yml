@@ -1,0 +1,34 @@
+snapshots:
+
+  # The only Type 2 in the project, and it earns it for one reason: a customer's
+  # OTIF target is the bar their deliveries are judged against, and that bar
+  # moves at contract renewal.
+  #
+  # Without this, raising Oatly's target from 98.5 to 99.2 rewrites history --
+  # deliveries that met the target on the day become breaches, and a quarter
+  # that was already closed gets worse. Nothing in the data would say why.
+  #
+  # Watches bronze, not staging. A snapshot is the one thing in dbt that cannot
+  # be rebuilt from source, so it should watch the rawest thing there is. Point
+  # it at a staging model and renaming a column six months from now writes a
+  # fake version for all fifteen customers on the same day, permanently.
+  - name: snap_customers
+    relation: source('bronze', 'customers')
+    config:
+      schema: silver
+      unique_key: customer_id
+
+      # check, not timestamp. The source has no updated_at to trust.
+      strategy: check
+
+      # The contract columns, and only these. Everything else in the table comes
+      # along and is overwritten without opening a version -- a corrected
+      # company name is a correction, not a new version of the customer.
+      check_cols:
+        - sla_otif_target_pct
+        - sustainability_reporting_required
+        - diesel_baseline_gco2_per_tonkm
+
+      # A customer that disappears from the source gets a final row flagged
+      # deleted, rather than sitting there looking current forever.
+      hard_deletes: new_record

@@ -47,11 +47,49 @@ if os.path.exists(_ENV_PATH):
             # connection string contains '=' inside the SharedAccessKey itself.
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip())
+                v = v.strip()
+                # Strip surrounding quotes. Writing TOKEN="dapi..." is a natural
+                # thing to do and the quotes then travel into the Authorization
+                # header, where Databricks answers "credential was not sent or
+                # was of an unsupported type" and says nothing about quotes.
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                    v = v[1:-1]
+                os.environ.setdefault(k.strip(), v)
 
 CONN_STR = os.environ.get("EVENTHUB_CONNECTION_STRING", "").strip()
 HUB_NAME = os.environ.get("EVENTHUB_NAME", "telemetry").strip()
-LIVE_MODE = bool(CONN_STR)
+
+# The Databricks route. Event Hubs was the original transport; when the Azure
+# subscription lapsed the hub went with it, so the app writes NDJSON files into
+# a Unity Catalog volume instead and Auto Loader picks them up.
+#
+# Nothing downstream changed. read_json_text takes a dataframe with a text
+# column and does not care whether a message arrived over AMQP or in a file --
+# which is the point of having decoupled the transport in the first place.
+DBX_HOST = os.environ.get("DATABRICKS_HOST", "").strip().rstrip("/")
+DBX_TOKEN = os.environ.get("DATABRICKS_TOKEN", "").strip()
+DBX_VOLUME = os.environ.get(
+    "DATABRICKS_VOLUME", "/Volumes/einride/bronze/landing").strip().rstrip("/")
+
+# Rows per file. One file per row would give Auto Loader tens of thousands of
+# tiny objects to list; one file per run would not arrive until the run ended.
+VOLUME_FLUSH_ROWS = int(os.environ.get("VOLUME_FLUSH_ROWS", "500"))
+
+VOLUME_MODE = bool(DBX_HOST and DBX_TOKEN)
+LIVE_MODE = bool(CONN_STR) or VOLUME_MODE
+
+# What the UI calls the far end, and what the generator stamps on each message.
+# The source tag is not decoration: silver keeps it, so test traffic and the two
+# transports stay separable in the warehouse long after this app is closed.
+if VOLUME_MODE:
+    DESTINATION = DBX_VOLUME
+    STREAM_SOURCE = "volume_stream"
+elif CONN_STR:
+    DESTINATION = HUB_NAME
+    STREAM_SOURCE = "event_hub_stream"
+else:
+    DESTINATION = "mock"
+    STREAM_SOURCE = "event_hub_stream"
 
 app = Flask(__name__)
 # Keep JSON keys in insertion order. Flask sorts them alphabetically by default,
@@ -130,8 +168,164 @@ class EventHubSender:
             pass
 
 
+class VolumeSender:
+    """Writes messages as NDJSON files into a Unity Catalog volume.
+
+    Buffered on purpose. send() is called once per vehicle in the simulation
+    loop, and a file per vehicle per tick would bury Auto Loader in small
+    objects. Rows accumulate and go out in one file per VOLUME_FLUSH_ROWS, plus
+    whatever is left at close().
+
+    There is no partition key here and none is needed. Event Hubs used it to
+    keep one vehicle's events on one partition and therefore in order; a file
+    has no partitions. Order is re-established downstream from the data itself
+    -- event_time for telemetry, change_seq for shipment changes -- which was
+    always the more honest place for it.
+    """
+
+    mode = "VOLUME"
+
+    def __init__(self, prefix="telemetry"):
+        self.prefix = prefix
+        self.buffer = []
+        self.files_written = 0
+
+    def send(self, events, partition_key=None):
+        for e in events:
+            self.buffer.append(json.dumps(e, separators=(",", ":")))
+        if len(self.buffer) >= VOLUME_FLUSH_ROWS:
+            self._flush()
+        return len(events)
+
+    def _flush(self):
+        if not self.buffer:
+            return
+        import requests
+
+        # Name carries the time and a counter. Auto Loader tracks files it has
+        # already seen, so the only hard requirement is that a name is never
+        # reused -- but a sortable name makes the volume readable by a human.
+        self.files_written += 1
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        name = f"{self.prefix}-{stamp}-{self.files_written:05d}.ndjson"
+
+        body = ("\n".join(self.buffer) + "\n").encode("utf-8")
+        self.buffer = []
+
+        resp = requests.put(
+            f"{DBX_HOST}/api/2.0/fs/files{DBX_VOLUME}/{name}",
+            headers={"Authorization": f"Bearer {DBX_TOKEN}"},
+            data=body,
+            timeout=30,
+        )
+        if resp.status_code >= 400:
+            # Databricks says why in the body. Raising the bare status throws
+            # that away and leaves you guessing at a number.
+            raise RuntimeError(
+                f"upload failed {resp.status_code} for {DBX_VOLUME}/{name}: "
+                f"{resp.text[:300]}")
+
+    def close(self):
+        self._flush()
+
+
+def sender_mode():
+    return "VOLUME" if VOLUME_MODE else ("LIVE" if CONN_STR else "MOCK")
+
+
 def make_sender():
-    return EventHubSender() if LIVE_MODE else MockSender()
+    if VOLUME_MODE:
+        return VolumeSender()
+    return EventHubSender() if CONN_STR else MockSender()
+
+
+def preflight():
+    """Write a tiny file and read it back, to prove the credentials work.
+
+    Worth its own button. Everything else in this app takes seconds to minutes,
+    and finding out at the end of a simulation that the token was wrong is a bad
+    way to spend an afternoon.
+    """
+    if not VOLUME_MODE:
+        return {"ok": False, "mode": DESTINATION,
+                "detail": "no Databricks host or token configured - running mock"}
+
+    # The shape of the token, never the token. A 401 is almost always something
+    # visible from here: stray quotes, a pasted "Bearer " prefix, or a value
+    # that is not a PAT at all.
+    shape = {"length": len(DBX_TOKEN),
+             "starts_with": DBX_TOKEN[:5],
+             "looks_like_pat": DBX_TOKEN.startswith("dapi"),
+             "has_quotes": DBX_TOKEN[:1] in "\"'" or DBX_TOKEN[-1:] in "\"'",
+             "has_space": " " in DBX_TOKEN}
+
+    import requests
+    hdr = {"Authorization": f"Bearer {DBX_TOKEN}"}
+    probe = f"{DBX_VOLUME}/_preflight.ndjson"
+    body = json.dumps({"probe": datetime.now(timezone.utc).isoformat()}).encode()
+
+    try:
+        put = requests.put(f"{DBX_HOST}/api/2.0/fs/files{probe}?overwrite=true",
+                           headers=hdr, data=body, timeout=30)
+        put.raise_for_status()
+
+        got = requests.get(f"{DBX_HOST}/api/2.0/fs/files{probe}",
+                           headers=hdr, timeout=30)
+        got.raise_for_status()
+
+        # Named with a leading underscore so Auto Loader skips it -- Spark
+        # ignores files starting with _ or . So the probe proves the round trip
+        # without putting a junk row into bronze.
+        return {"ok": True, "mode": "VOLUME", "volume": DBX_VOLUME,
+                "host": DBX_HOST, "wrote": len(body),
+                "read_back": got.text.strip()}
+    except Exception as exc:
+        detail = str(exc)[:200]
+        hint = ""
+        if "401" in detail or "403" in detail:
+            hint = " - token rejected. See token_shape below."
+            if shape["has_quotes"]:
+                hint += " The value has quotes around it - remove them."
+            elif shape["has_space"]:
+                hint += " The value contains a space - did you paste 'Bearer ' too?"
+            elif not shape["looks_like_pat"]:
+                hint += " A Databricks PAT starts with 'dapi'."
+            else:
+                hint += " Shape looks right, so the token is wrong or expired."
+        elif "404" in detail:
+            hint = f" - path not found. Does {DBX_VOLUME} exist? CREATE VOLUME first."
+        elif "Name or service not known" in detail or "getaddrinfo" in detail:
+            hint = " - host unreachable. Check DATABRICKS_HOST has no trailing path."
+        return {"ok": False, "mode": "VOLUME", "detail": detail + hint,
+                "token_shape": shape}
+
+
+def _read_back_volume(limit):
+    """Read the most recent file back out of the volume.
+
+    Proves the round trip: the app wrote it, Databricks stored it, and it can be
+    read again without a notebook.
+    """
+    import requests
+
+    hdr = {"Authorization": f"Bearer {DBX_TOKEN}"}
+    try:
+        listing = requests.get(f"{DBX_HOST}/api/2.0/fs/directories{DBX_VOLUME}",
+                               headers=hdr, timeout=20)
+        listing.raise_for_status()
+        files = [f for f in listing.json().get("contents", [])
+                 if f.get("path", "").endswith(".ndjson")]
+        if not files:
+            return [], "no files in the volume yet"
+
+        newest = max(files, key=lambda f: f.get("last_modified", 0))
+        body = requests.get(f"{DBX_HOST}/api/2.0/fs/files{newest['path']}",
+                            headers=hdr, timeout=30)
+        body.raise_for_status()
+        rows = [json.loads(line) for line in body.text.splitlines() if line.strip()]
+        return rows[:limit], None
+    except Exception as exc:
+        return [], f"read-back unavailable ({str(exc)[:120]})"
 
 
 def read_back(limit, since, timeout=8):
@@ -141,6 +335,11 @@ def read_back(limit, since, timeout=8):
     """
     if not LIVE_MODE:
         return [], "mock mode - nothing to read back"
+
+    # A volume is not a queue. The proof that a file landed is that the file is
+    # there, so the read-back lists the volume rather than replaying a stream.
+    if VOLUME_MODE:
+        return _read_back_volume(limit)
 
     try:
         from azure.eventhub import EventHubConsumerClient
@@ -233,7 +432,7 @@ def estimate_events(families, days, grain):
 def run_simulation(families, days, grain, rate):
     """Background worker: advance the engine and push events to the hub."""
     sender = make_sender()
-    SIM.say(f"sender ready in {sender.mode} mode -> hub '{HUB_NAME}'")
+    SIM.say(f"sender ready in {sender.mode} mode -> {DESTINATION}")
 
     try:
         engine = FleetEngine(
@@ -265,7 +464,7 @@ def run_simulation(families, days, grain, rate):
                 last_day = day
                 batch = [engine.daily_rollup(v) for v in ids]
             else:
-                batch = [engine.emit(v, source="event_hub_stream") for v in ids]
+                batch = [engine.emit(v, source=STREAM_SOURCE) for v in ids]
 
             # Group by vehicle so each send carries one partition key. This is what
             # preserves per-vehicle ordering on the hub.
@@ -303,9 +502,23 @@ def run_simulation(families, days, grain, rate):
 # ---------------------------------------------------------------------------
 # ROUTES
 # ---------------------------------------------------------------------------
+@app.errorhandler(Exception)
+def api_errors_as_json(exc):
+    """An API route that blows up should say so in JSON.
+
+    Flask's default is an HTML error page, and the browser then fails on the
+    first '<' with a parse error that says nothing about what actually went
+    wrong. The page keeps the HTML page; /api/ gets the reason.
+    """
+    if not request.path.startswith("/api/"):
+        raise exc
+    app.logger.exception("error on %s", request.path)
+    return jsonify({"error": type(exc).__name__, "detail": str(exc)[:500]}), 500
+
+
 @app.route("/")
 def index():
-    return render_template("index.html", live=LIVE_MODE, hub=HUB_NAME)
+    return render_template("index.html", live=LIVE_MODE, hub=DESTINATION)
 
 
 @app.route("/api/estimate")
@@ -322,6 +535,12 @@ def api_estimate():
     })
 
 
+@app.route("/api/preflight")
+def api_preflight():
+    """Prove the connection before spending a simulation on it."""
+    return jsonify(preflight())
+
+
 @app.route("/api/test-batch", methods=["POST"])
 def api_test_batch():
     """Five events, shown in full, then read back off the hub."""
@@ -334,7 +553,7 @@ def api_test_batch():
         engine.advance(60)
 
     ids = list(engine.state.keys())[:n]
-    events = [engine.emit(v, source="event_hub_stream") for v in ids]
+    events = [engine.emit(v, source=STREAM_SOURCE) for v in ids]
 
     # Mark the clock BEFORE sending, then read from that point, so the read-back
     # cannot pick up unrelated events already sitting on the hub.
@@ -350,8 +569,8 @@ def api_test_batch():
     echoed, note = read_back(limit=n, since=since)
 
     return jsonify({
-        "mode": "LIVE" if LIVE_MODE else "MOCK",
-        "hub": HUB_NAME,
+        "mode": sender_mode(),
+        "hub": DESTINATION,
         "sent": sent,
         "elapsed_ms": elapsed_ms,
         "partition_keys": [e.get("truck_id") or e.get("pod_id") for e in events],
@@ -410,5 +629,7 @@ def api_sim_stop():
 
 
 if __name__ == "__main__":
-    print(f"Mode: {'LIVE -> ' + HUB_NAME if LIVE_MODE else 'MOCK (no connection string)'}")
+    print(f"Mode: {sender_mode()} -> {DESTINATION}")
+    _pf = preflight()
+    print(f"Preflight: {'OK' if _pf['ok'] else 'FAILED - ' + _pf.get('detail', '')}")
     app.run(debug=True, port=5000)
