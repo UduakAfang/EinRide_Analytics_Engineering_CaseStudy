@@ -29,7 +29,12 @@ SELECT
     dep.depot_name                                  AS home_depot_name,
     dep.region                                      AS home_depot_region,
 
-    s.dbt_valid_from                                AS valid_from,
+    -- dbt stamps the first version with the day the snapshot first ran, which is
+    -- after the history it describes. Backdate it so facts older than the first
+    -- snapshot still find a row. Later versions keep their real dates.
+    CASE WHEN LAG(s.dbt_valid_from) OVER (PARTITION BY s.driver_id ORDER BY s.dbt_valid_from) IS NULL
+         THEN TIMESTAMP '1900-01-01' ELSE s.dbt_valid_from END
+                                                    AS valid_from,
     s.dbt_valid_to                                  AS valid_to,
     s.dbt_valid_to IS NULL                          AS is_current
 

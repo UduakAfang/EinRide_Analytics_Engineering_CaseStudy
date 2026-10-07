@@ -56,6 +56,10 @@ numbered AS (
 
 )
 
+-- NOTE: MAX_BY/MIN_BY take the value at the latest/earliest event of the whole
+-- group, and the group runs on past the last route reading (the vehicle goes
+-- idle, route_id is null). The old CASE inside MAX_BY therefore returned NULL
+-- for most trips. FILTER restricts the pick to route readings only.
 SELECT
     {{ dbt_utils.generate_surrogate_key(['vehicle_id', 'trip_seq']) }} AS trip_id,
     vehicle_id,
@@ -78,16 +82,16 @@ SELECT
 
     -- The meters are lifetime odometers, so a trip is the difference between
     -- the first and last reading. Never a sum.
-    MAX_BY(CASE WHEN route_id IS NOT NULL THEN distance_meter_km END, event_time)
-      - MIN_BY(CASE WHEN route_id IS NOT NULL THEN distance_meter_km END, event_time)
+    MAX_BY(distance_meter_km, event_time) FILTER (WHERE route_id IS NOT NULL)
+      - MIN_BY(distance_meter_km, event_time) FILTER (WHERE route_id IS NOT NULL)
                                                         AS trip_distance_km,
-    MAX_BY(CASE WHEN route_id IS NOT NULL THEN energy_meter_kwh END, event_time)
-      - MIN_BY(CASE WHEN route_id IS NOT NULL THEN energy_meter_kwh END, event_time)
+    MAX_BY(energy_meter_kwh, event_time) FILTER (WHERE route_id IS NOT NULL)
+      - MIN_BY(energy_meter_kwh, event_time) FILTER (WHERE route_id IS NOT NULL)
                                                         AS trip_energy_kwh,
 
-    MIN_BY(CASE WHEN route_id IS NOT NULL THEN state_of_charge_pct END, event_time)
+    MIN_BY(state_of_charge_pct, event_time) FILTER (WHERE route_id IS NOT NULL)
                                                         AS soc_start_pct,
-    MAX_BY(CASE WHEN route_id IS NOT NULL THEN state_of_charge_pct END, event_time)
+    MAX_BY(state_of_charge_pct, event_time) FILTER (WHERE route_id IS NOT NULL)
                                                         AS soc_end_pct,
 
     AVG(CASE WHEN route_id IS NOT NULL THEN speed_kmh END)
